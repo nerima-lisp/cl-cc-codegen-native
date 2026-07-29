@@ -154,3 +154,92 @@
                         nil)
                     (error () t))
                   :to-be-truthy))))))
+
+
+(defun %native-emitter-octets (emitter inst)
+  (let ((bytes (quote ())))
+    (funcall
+      emitter
+      inst
+      (lambda (byte)
+        (push byte bytes)))
+    (coerce (nreverse bytes) (quote (simple-array (unsigned-byte 8) (*))))))
+
+(describe-sequential
+  "native float precision lowering"
+  (it
+    "selects x86 scalar single and double encodings"
+    (expect
+      (cl-cc/codegen::with-output-to-vector
+        (stream)
+        (cl-cc/codegen::emit-vm-float-add
+          (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1 :precision :f32)
+          stream))
+      :to-equalp
+      #(243 15 16 208 243 15 88 209))
+    (expect
+      (cl-cc/codegen::with-output-to-vector
+        (stream)
+        (cl-cc/codegen::emit-vm-float-add
+          (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1)
+          stream))
+      :to-equalp
+      #(242 15 16 208 242 15 88 209)))
+  (it
+    "selects x86 scalar FMA precision"
+    (expect
+      (cl-cc/codegen::with-output-to-vector
+        (stream)
+        (cl-cc/codegen::emit-vm-fma
+          (cl-cc/vm:make-vm-fma :dst :r3 :a :r0 :b :r1 :c :r2 :precision :f32)
+          stream))
+      :to-equalp
+      #(243 15 16 216 196 226 105 153 217))
+    (expect
+      (cl-cc/codegen::with-output-to-vector
+        (stream)
+        (cl-cc/codegen::emit-vm-fma
+          (cl-cc/vm:make-vm-fma :dst :r3 :a :r0 :b :r1 :c :r2)
+          stream))
+      :to-equalp
+      #(242 15 16 216 196 226 233 153 217)))
+  (it
+    "selects AArch64 scalar and FMA precision"
+    (expect
+      (%native-emitter-octets
+        (function cl-cc/codegen::emit-a64-vm-float-add)
+        (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1 :precision :f32))
+      :to-equalp
+      #(2 40 33 30))
+    (expect
+      (%native-emitter-octets
+        (function cl-cc/codegen::emit-a64-vm-float-add)
+        (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1))
+      :to-equalp
+      #(2 40 97 30))
+    (expect
+      (%native-emitter-octets
+        (function cl-cc/codegen::emit-a64-vm-fma)
+        (cl-cc/vm:make-vm-fma :dst :r3 :a :r0 :b :r1 :c :r2 :precision :f32))
+      :to-equalp
+      #(3 8 1 31))
+    (expect
+      (%native-emitter-octets
+        (function cl-cc/codegen::emit-a64-vm-fma)
+        (cl-cc/vm:make-vm-fma :dst :r3 :a :r0 :b :r1 :c :r2))
+      :to-equalp
+      #(3 8 65 31)))
+  (it
+    "selects RISC-V scalar single and double encodings"
+    (expect
+      (%native-emitter-octets
+        (function cl-cc/codegen::emit-riscv64-vm-float-add)
+        (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1 :precision :f32))
+      :to-equalp
+      #(83 1 16 0))
+    (expect
+      (%native-emitter-octets
+        (function cl-cc/codegen::emit-riscv64-vm-float-add)
+        (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1))
+      :to-equalp
+      #(83 1 16 2))))

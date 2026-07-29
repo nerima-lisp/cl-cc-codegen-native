@@ -382,13 +382,22 @@
                                (riscv64-reg (vm-rhs inst)))
                    stream)))
 
-(defmacro define-riscv64-fp-binary-emitter (fn-name encode-fn)
-  "Define a RISC-V double-precision FP binary VM emitter."
+(defmacro define-riscv64-fp-binary-emitter (fn-name s-encode-fn d-encode-fn)
+  "Define a precision-aware RISC-V FP binary VM emitter."
   `(defun ,fn-name (inst stream)
-     (emit-riscv32 (,encode-fn (riscv64-freg (vm-dst inst))
-                               (riscv64-freg (vm-lhs inst))
-                               (riscv64-freg (vm-rhs inst)))
-                   stream)))
+    (emit-riscv32
+      (ecase (vm-float-precision inst)
+        (:f32
+          (,s-encode-fn
+            (riscv64-freg (vm-dst inst))
+            (riscv64-freg (vm-lhs inst))
+            (riscv64-freg (vm-rhs inst))))
+        (:f64
+          (,d-encode-fn
+            (riscv64-freg (vm-dst inst))
+            (riscv64-freg (vm-lhs inst))
+            (riscv64-freg (vm-rhs inst)))))
+      stream)))
 
 (defun emit-riscv64-vm-const (inst stream)
   (emit-riscv64-li (riscv64-reg (vm-dst inst))
@@ -406,10 +415,10 @@
 (define-riscv64-binary-emitter emit-riscv64-vm-mul encode-rv-mul)
 (define-riscv64-binary-emitter emit-riscv64-vm-div encode-rv-div)
 (define-riscv64-binary-emitter emit-riscv64-vm-rem encode-rv-rem)
-(define-riscv64-fp-binary-emitter emit-riscv64-vm-float-add encode-rv-fadd-d)
-(define-riscv64-fp-binary-emitter emit-riscv64-vm-float-sub encode-rv-fsub-d)
-(define-riscv64-fp-binary-emitter emit-riscv64-vm-float-mul encode-rv-fmul-d)
-(define-riscv64-fp-binary-emitter emit-riscv64-vm-float-div encode-rv-fdiv-d)
+(define-riscv64-fp-binary-emitter emit-riscv64-vm-float-add encode-rv-fadd-s encode-rv-fadd-d)
+(define-riscv64-fp-binary-emitter emit-riscv64-vm-float-sub encode-rv-fsub-s encode-rv-fsub-d)
+(define-riscv64-fp-binary-emitter emit-riscv64-vm-float-mul encode-rv-fmul-s encode-rv-fmul-d)
+(define-riscv64-fp-binary-emitter emit-riscv64-vm-float-div encode-rv-fdiv-s encode-rv-fdiv-d)
 
 (defun emit-riscv64-vm-halt (inst stream)
   "Move VM result to the psABI integer return register A0."

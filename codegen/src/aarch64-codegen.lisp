@@ -283,21 +283,57 @@
   "FADD Dd, Dn, Dm (scalar double-precision floating-point add)."
   (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
 
-;; FSUB Dd, Dn, Dm (scalar double-precision floating-point subtract)
+(defenc
+    fadd-s
+    #x1E202800
+    (rd rn rm)
+    "FADD Sd, Sn, Sm (scalar single-precision floating-point add)."
+    (rd #x1F 0)
+    (rn #x1F 5)
+    (rm #x1F 16))
+
 (defenc fsub #x1E603800 (rd rn rm)
   "FSUB Dd, Dn, Dm (scalar double-precision floating-point subtract)."
   (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
 
-;; FMUL Dd, Dn, Dm (scalar double-precision floating-point multiply)
+(defenc
+    fsub-s
+    #x1E203800
+    (rd rn rm)
+    "FSUB Sd, Sn, Sm (scalar single-precision floating-point subtract)."
+    (rd #x1F 0)
+    (rn #x1F 5)
+    (rm #x1F 16))
+
 (defenc fmul #x1E600800 (rd rn rm)
   "FMUL Dd, Dn, Dm (scalar double-precision floating-point multiply)."
   (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
 
-;; FDIV Dd, Dn, Dm (scalar double-precision floating-point divide)
+(defenc
+    fmul-s
+    #x1E200800
+    (rd rn rm)
+    "FMUL Sd, Sn, Sm (scalar single-precision floating-point multiply)."
+    (rd #x1F 0)
+    (rn #x1F 5)
+    (rm #x1F 16))
+
 (defenc fdiv #x1E601800 (rd rn rm)
   "FDIV Dd, Dn, Dm (scalar double-precision floating-point divide)."
   (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
 
+(defenc
+    fdiv-s
+    #x1E201800
+    (rd rn rm)
+    "FDIV Sd, Sn, Sm (scalar single-precision floating-point divide)."
+    (rd #x1F 0)
+    (rn #x1F 5)
+    (rm #x1F 16))
+
+;; FSUB Dd, Dn, Dm (scalar double-precision floating-point subtract)
+;; FMUL Dd, Dn, Dm (scalar double-precision floating-point multiply)
+;; FDIV Dd, Dn, Dm (scalar double-precision floating-point divide)
 ;;; --- NEON / AdvSIMD packed 32-bit integer operations ---
 
 (defenc neon-add4s #x4EA08400 (rd rn rm)
@@ -347,6 +383,10 @@
 (defenc fmadd #x1F400000 (rd rn rm ra)
   "FMADD Dd, Dn, Dm, Da (scalar double-precision fused multiply-add)."
   (rd #x1F 0) (rn #x1F 5) (ra #x1F 10) (rm #x1F 16))
+
+(defenc fmadd-s #x1F000000 (rd rn rm ra)
+    "FMADD Sd, Sn, Sm, Sa (scalar single-precision fused multiply-add)."
+    (rd #x1F 0) (rn #x1F 5) (ra #x1F 10) (rm #x1F 16))
 
 ;; UMULH Xd, Xn, Xm (unsigned high 64 bits of 128-bit product)
 (defenc umulh #x9BC07C00 (rd rn rm)

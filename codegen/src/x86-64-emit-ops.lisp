@@ -57,14 +57,19 @@
        (emit-mov-rr64 dst src stream)
        (,asm-op dst stream))))
 
-(defmacro define-float-binary-emitter (fn-name asm-op)
-  "Define an XMM binary emitter: MOVSD dst←lhs, then ASM-OP dst←rhs."
+(defmacro define-float-binary-emitter (fn-name ss-op sd-op)
+  "Define a precision-aware XMM binary emitter."
   `(defun ,fn-name (inst stream)
      (let ((dst (vm-reg-to-xmm (vm-dst inst)))
            (lhs (vm-reg-to-xmm (vm-lhs inst)))
            (rhs (vm-reg-to-xmm (vm-rhs inst))))
-       (emit-movsd-xx dst lhs stream)
-       (,asm-op dst rhs stream))))
+       (ecase (vm-float-precision inst)
+         (:f32
+          (emit-movss-xx dst lhs stream)
+          (,ss-op dst rhs stream))
+         (:f64
+          (emit-movsd-xx dst lhs stream)
+          (,sd-op dst rhs stream))))))
 
 (defmacro define-float-unary-emitter (fn-name asm-op)
   "Define an XMM unary emitter: MOVSD dst←src, then ASM-OP dst←dst."
@@ -209,21 +214,25 @@ memory operand."
           (emit-x86-64-simd-address dst-array index element-type stream)
           (emit-vmovdqu-my +r11+ 0 +ymm0+ stream)))))
 
-(define-float-binary-emitter emit-vm-float-add emit-addsd-xx)
-(define-float-binary-emitter emit-vm-float-sub emit-subsd-xx)
-(define-float-binary-emitter emit-vm-float-mul emit-mulsd-xx)
-(define-float-binary-emitter emit-vm-float-div emit-divsd-xx)
+(define-float-binary-emitter emit-vm-float-add emit-addss-xx emit-addsd-xx)
+(define-float-binary-emitter emit-vm-float-sub emit-subss-xx emit-subsd-xx)
+(define-float-binary-emitter emit-vm-float-mul emit-mulss-xx emit-mulsd-xx)
+(define-float-binary-emitter emit-vm-float-div emit-divss-xx emit-divsd-xx)
 (define-float-unary-emitter emit-vm-sqrt emit-sqrtsd-xx)
 
 (defun emit-vm-fma (inst stream)
-  "Emit scalar double FMA: dst = lhs * rhs + acc."
+  "Emit a precision-aware scalar FMA: dst = a * b + c."
   (let ((dst (vm-reg-to-xmm (vm-dst inst)))
         (lhs (vm-reg-to-xmm (vm-a inst)))
         (rhs (vm-reg-to-xmm (vm-b inst)))
         (acc (vm-reg-to-xmm (vm-c inst))))
-    ;; Keep fixed 9-byte size for label accounting: MOVSD + VFMADD132SD.
-    (emit-movsd-xx dst lhs stream)
-    (emit-vfmadd132sd-xxx dst acc rhs stream)))
+    (ecase (vm-float-precision inst)
+      (:f32
+       (emit-movss-xx dst lhs stream)
+       (emit-vfmadd132ss-xxx dst acc rhs stream))
+      (:f64
+       (emit-movsd-xx dst lhs stream)
+       (emit-vfmadd132sd-xxx dst acc rhs stream)))))
 
 ;;; Libm-call transcendental emitters (FR-286)
 ;;;

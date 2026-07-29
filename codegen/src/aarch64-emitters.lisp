@@ -110,10 +110,37 @@
 (define-a64-binary-emitter emit-a64-vm-truncate encode-sdiv)
 (define-a64-binary-emitter emit-a64-vm-integer-mul-high-u encode-umulh)
 (define-a64-binary-emitter emit-a64-vm-integer-mul-high-s encode-smulh)
-(define-a64-binary-emitter emit-a64-vm-float-add encode-fadd)
-(define-a64-binary-emitter emit-a64-vm-float-sub encode-fsub)
-(define-a64-binary-emitter emit-a64-vm-float-mul encode-fmul)
-(define-a64-binary-emitter emit-a64-vm-float-div encode-fdiv)
+(defmacro define-a64-float-binary-emitter (fn-name s-encode-fn d-encode-fn)
+    "Define a precision-aware AArch64 floating-point binary VM emitter."
+    `(defun ,fn-name (inst stream)
+      (let ((rd (a64-reg (vm-dst inst)))
+            (rn (a64-reg (vm-lhs inst)))
+            (rm (a64-reg (vm-rhs inst))))
+        (emit-a64-instr
+          (ecase (vm-float-precision inst)
+            (:f32 (,s-encode-fn rd rn rm))
+            (:f64 (,d-encode-fn rd rn rm)))
+          stream))))
+  (define-a64-float-binary-emitter
+    emit-a64-vm-float-add
+    encode-fadd-s
+    encode-fadd)
+
+(defun emit-a64-vm-fma (inst stream)
+  "Emit a precision-aware FMADD for vm-fma."
+  (let ((rd (a64-reg (vm-dst inst)))
+        (rn (a64-reg (vm-a inst)))
+        (rm (a64-reg (vm-b inst)))
+        (ra (a64-reg (vm-c inst))))
+    (emit-a64-instr
+      (ecase (vm-float-precision inst)
+        (:f32 (encode-fmadd-s rd rn rm ra))
+        (:f64 (encode-fmadd rd rn rm ra)))
+      stream)))
+
+(define-a64-float-binary-emitter emit-a64-vm-float-sub encode-fsub-s encode-fsub)
+(define-a64-float-binary-emitter emit-a64-vm-float-mul encode-fmul-s encode-fmul)
+(define-a64-float-binary-emitter emit-a64-vm-float-div encode-fdiv-s encode-fdiv)
 
 (defun emit-a64-boolean-result (rd cond-code stream)
   "Set RD to 1 when current flags satisfy COND-CODE, otherwise 0.
@@ -167,14 +194,6 @@ these must be reimplemented with actual tag checks."
 (define-a64-cmp-emitter emit-a64-vm-ge     10 "vm-ge: dst = (lhs >= rhs) ? 1 : 0  -- signed.")
 (define-a64-cmp-emitter emit-a64-vm-num-eq 0  "vm-num-eq: dst = (lhs == rhs) ? 1 : 0.")
 (define-a64-cmp-emitter emit-a64-vm-eq     0  "vm-eq: dst = (lhs == rhs) ? 1 : 0.")
-
-(defun emit-a64-vm-fma (inst stream)
-  "Emit FMADD Dd, Dn, Dm, Da for vm-fma."
-  (let ((rd (a64-reg (vm-dst inst)))
-        (rn (a64-reg (vm-a inst)))
-        (rm (a64-reg (vm-b inst)))
-        (ra (a64-reg (vm-c inst))))
-    (emit-a64-instr (encode-fmadd rd rn rm ra) stream)))
 
 ;;; Checked arithmetic emitters (FR-303 overflow detection)
 ;;;

@@ -122,6 +122,8 @@
                        (wasm-encode-signed-leb128 value)))
          ((null value) (vector +wasm-ref-null+ +heap-none+))
          (t (vector +wasm-nop+)))))
+    ((or vm-float-add vm-float-sub vm-float-mul vm-float-div)
+     (%wasm-reject-float-arithmetic inst))
     ((or vm-add vm-integer-add) (vector +wasm-i64-add+))
     ((or vm-sub vm-integer-sub) (vector +wasm-i64-sub+))
     ((or vm-mul vm-integer-mul) (vector +wasm-i64-mul+))

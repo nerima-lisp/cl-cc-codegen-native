@@ -755,3 +755,23 @@ emission structurally aware without changing the VM instruction definition."
 (defmethod emit-instruction ((target wasm-target) instruction stream)
   (declare (ignore target stream))
   (error "Unsupported WASM instruction: ~A" (type-of instruction)))
+
+(defun %wasm-reject-float-arithmetic (inst)
+  (error "Wasm float arithmetic lowering is not implemented for ~S"
+         (type-of inst)))
+
+(defmethod emit-instruction ((target wasm-target) (inst vm-float-add) stream)
+  (declare (ignore target stream))
+  (%wasm-reject-float-arithmetic inst))
+
+(defmethod emit-instruction ((target wasm-target) (inst vm-float-sub) stream)
+  (declare (ignore target stream))
+  (%wasm-reject-float-arithmetic inst))
+
+(defmethod emit-instruction ((target wasm-target) (inst vm-float-mul) stream)
+  (declare (ignore target stream))
+  (%wasm-reject-float-arithmetic inst))
+
+(defmethod emit-instruction ((target wasm-target) (inst vm-float-div) stream)
+  (declare (ignore target stream))
+  (%wasm-reject-float-arithmetic inst))

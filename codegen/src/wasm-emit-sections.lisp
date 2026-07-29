@@ -418,22 +418,26 @@ This is a conservative MOP-aware approximation for slot index lowering."
 (defun wasm-slot-index-for-object-slot (target obj-reg slot-name)
   "Resolve SLOT-NAME index using object->class->slot layout when available.
 
-Fallback order:
-1) object register class mapping + class slot layout
-2) global known-slot-indexes table
-3) 0 (staged fallback)"
+Falls back to the global known-slot-indexes table. Signals an error when
+neither layout records SLOT-NAME."
   (let* ((class-name (gethash obj-reg (wasm-target-known-object-class-by-reg target)))
          (layout (and class-name
                       (gethash class-name (wasm-target-class-slot-layouts target)))))
-    (or (and layout (gethash slot-name layout))
-        (gethash slot-name (wasm-target-known-slot-indexes target))
-        0)))
+    (when layout
+      (multiple-value-bind (index presentp) (gethash slot-name layout)
+        (when presentp
+          (return-from wasm-slot-index-for-object-slot index))))
+    (wasm-slot-index-for target slot-name)))
 
 (defun wasm-slot-index-for (target slot-name)
   "Lookup slot index for SLOT-NAME recorded by prior vm-class-def emission.
 
-Falls back to 0 when unknown to preserve staged lowering behavior." 
-  (or (gethash slot-name (wasm-target-known-slot-indexes target)) 0))
+Signals an error when SLOT-NAME has no recorded layout."
+  (multiple-value-bind (index presentp)
+      (gethash slot-name (wasm-target-known-slot-indexes target))
+    (if presentp
+        index
+        (error "No Wasm slot index is recorded for ~S." slot-name))))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-class-def) stream)
   "Record class slot layout metadata for downstream slot lowering.

@@ -92,3 +92,65 @@
                   nil)
               (error (caught) caught))))
       (expect condition :to-be-truthy))))
+
+(describe-sequential "WASM slot layout resolution"
+  (it "preserves a recorded slot at index zero"
+    (let ((target (make-instance (quote cl-cc/codegen:wasm-target))))
+      (setf (gethash (quote first)
+                     (cl-cc/codegen::wasm-target-known-slot-indexes target))
+            0)
+      (expect (cl-cc/codegen::wasm-slot-index-for target (quote first)) :to-be 0)
+      (expect (cl-cc/codegen::wasm-slot-index-for-object-slot
+               target :object (quote first))
+              :to-be 0)))
+
+  (it "uses an object-specific class layout"
+    (let* ((target (make-instance (quote cl-cc/codegen:wasm-target)))
+           (layout (make-hash-table :test (function equal))))
+      (setf (gethash :object
+                     (cl-cc/codegen::wasm-target-known-object-class-by-reg target))
+            (quote widget)
+            (gethash (quote widget)
+                     (cl-cc/codegen::wasm-target-class-slot-layouts target))
+            layout
+            (gethash (quote first) layout)
+            0)
+      (expect (cl-cc/codegen::wasm-slot-index-for-object-slot
+               target :object (quote first))
+              :to-be 0)))
+
+  (it "rejects slots with no recorded layout"
+    (let ((target (make-instance (quote cl-cc/codegen:wasm-target))))
+      (dolist (lookup (list
+                        (lambda ()
+                          (cl-cc/codegen::wasm-slot-index-for
+                            target (quote missing)))
+                        (lambda ()
+                          (cl-cc/codegen::wasm-slot-index-for-object-slot
+                            target :object (quote missing)))))
+        (expect (handler-case
+                    (progn (funcall lookup) nil)
+                  (error (caught) caught))
+                :to-be-truthy)))))
+
+(describe-sequential "WASM float arithmetic fails closed"
+  (it "rejects all float arithmetic in text and binary lowering"
+    (let ((target (make-instance 'cl-cc/codegen:wasm-target)))
+      (dolist (constructor '(cl-cc/vm:make-vm-float-add
+                            cl-cc/vm:make-vm-float-sub
+                            cl-cc/vm:make-vm-float-mul
+                            cl-cc/vm:make-vm-float-div))
+        (let ((inst (funcall constructor :dst :r2 :lhs :r0 :rhs :r1)))
+          (expect (handler-case
+                      (progn
+                        (cl-cc/codegen::emit-instruction
+                         target inst (make-string-output-stream))
+                        nil)
+                    (error () t))
+                  :to-be-truthy)
+          (expect (handler-case
+                      (progn
+                        (cl-cc/codegen::wasm-encode-vm-instruction-opcode inst)
+                        nil)
+                    (error () t))
+                  :to-be-truthy))))))

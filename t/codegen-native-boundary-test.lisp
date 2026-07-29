@@ -95,7 +95,7 @@
 
 (describe-sequential "WASM slot layout resolution"
   (it "preserves a recorded slot at index zero"
-    (let ((target (make-instance (quote cl-cc/codegen:wasm-target))))
+    (let ((target (make-instance (quote cl-cc/emit:wasm-target))))
       (setf (gethash (quote first)
                      (cl-cc/codegen::wasm-target-known-slot-indexes target))
             0)
@@ -105,7 +105,7 @@
               :to-be 0)))
 
   (it "uses an object-specific class layout"
-    (let* ((target (make-instance (quote cl-cc/codegen:wasm-target)))
+    (let* ((target (make-instance (quote cl-cc/emit:wasm-target)))
            (layout (make-hash-table :test (function equal))))
       (setf (gethash :object
                      (cl-cc/codegen::wasm-target-known-object-class-by-reg target))
@@ -120,7 +120,7 @@
               :to-be 0)))
 
   (it "rejects slots with no recorded layout"
-    (let ((target (make-instance (quote cl-cc/codegen:wasm-target))))
+    (let ((target (make-instance (quote cl-cc/emit:wasm-target))))
       (dolist (lookup (list
                         (lambda ()
                           (cl-cc/codegen::wasm-slot-index-for
@@ -135,7 +135,7 @@
 
 (describe-sequential "WASM float arithmetic fails closed"
   (it "rejects all float arithmetic in text and binary lowering"
-    (let ((target (make-instance 'cl-cc/codegen:wasm-target)))
+    (let ((target (make-instance (quote cl-cc/emit:wasm-target))))
       (dolist (constructor '(cl-cc/vm:make-vm-float-add
                             cl-cc/vm:make-vm-float-sub
                             cl-cc/vm:make-vm-float-mul

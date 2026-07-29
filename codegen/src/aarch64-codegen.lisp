@@ -340,6 +340,18 @@
   "ADD Vd.4S, Vn.4S, Vm.4S."
   (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
 
+(defenc neon-fadd2d #x4E60D400 (rd rn rm)
+  "FADD Vd.2D, Vn.2D, Vm.2D."
+  (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
+
+(defenc neon-fsub2d #x4EE0D400 (rd rn rm)
+  "FSUB Vd.2D, Vn.2D, Vm.2D."
+  (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
+
+(defenc neon-fmul2d #x6E60DC00 (rd rn rm)
+  "FMUL Vd.2D, Vn.2D, Vm.2D."
+  (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
+
 (defenc neon-sub4s #x6EA08400 (rd rn rm)
   "SUB Vd.4S, Vn.4S, Vm.4S."
   (rd #x1F 0) (rn #x1F 5) (rm #x1F 16))
@@ -373,11 +385,17 @@
   (let ((lanes (vm-simd-vector-op-lanes inst))
         (element-type (vm-simd-vector-op-element-type inst))
         (op (vm-simd-vector-op-op inst)))
-    (unless (and (= lanes 4) (eq element-type :i32))
-      (error "AArch64 NEON SIMD supports only 4 lanes of :I32, got ~D lanes of ~S"
-             lanes element-type))
-    (unless (member op '(:add :sub :mul :logand :logior :logxor))
-      (error "AArch64 NEON SIMD op ~S is unsupported for 4 lanes of :I32" op))))
+    (unless (or
+        (and
+          (= lanes 4)
+          (eq element-type :i32)
+          (member op (quote (:add :sub :mul :logand :logior :logxor))))
+        (and (= lanes 2) (eq element-type :f64) (member op (quote (:add :sub :mul)))))
+      (error
+        "Unsupported AArch64 NEON SIMD shape/op: ~D lanes of ~S with ~S"
+        lanes
+        element-type
+        op))))
 
 ;; FMADD Dd, Dn, Dm, Da — Dd = Da + Dn * Dm
 (defenc fmadd #x1F400000 (rd rn rm ra)

@@ -243,3 +243,43 @@
         (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1))
       :to-equalp
       #(83 1 16 2))))
+
+(describe-sequential "native packed F64 SIMD lowering"
+  (it "encodes x86 packed F64 bytes with matching size and scale"
+    (let* ((inst (cl-cc/vm:make-vm-simd-vector-op
+                   :op :add :dst-array :r3 :lhs-array :r1 :rhs-array :r2
+                   :index-reg :r4 :lanes 2 :element-type :f64))
+           (bytes (cl-cc/codegen::with-output-to-vector
+                    (stream)
+                    (cl-cc/codegen::emit-vm-simd-vector-op inst stream))))
+      (expect (cl-cc/codegen::x86-64-simd-element-scale :f64) :to-be 8)
+      (expect (search #(102 15 88 193) bytes :test (function =)) :to-be-truthy)
+      (expect (length bytes) :to-be (cl-cc/codegen::instruction-size inst))))
+  (it "encodes AArch64 packed F64 words with matching size"
+    (let* ((inst (cl-cc/vm:make-vm-simd-vector-op
+                   :op :add :dst-array :r3 :lhs-array :r1 :rhs-array :r2
+                   :index-reg :r4 :lanes 2 :element-type :f64))
+           (bytes (%native-emitter-octets
+                    (function cl-cc/codegen::emit-a64-vm-simd-vector-op)
+                    inst)))
+      (expect (cl-cc/codegen::encode-neon-fadd2d 0 0 1) :to-be #x4e61d400)
+      (expect (cl-cc/codegen::encode-neon-fsub2d 0 0 1) :to-be #x4ee1d400)
+      (expect (cl-cc/codegen::encode-neon-fmul2d 0 0 1) :to-be #x6e61dc00)
+      (expect (search #(0 212 97 78) bytes :test (function =)) :to-be-truthy)
+      (expect (length bytes) :to-be 40)
+      (expect (cl-cc/codegen::a64-instruction-size inst) :to-be 40)))
+  (it "rejects unsupported packed F64 SIMD shapes and operations"
+    (dolist (validator (list (function cl-cc/codegen::x86-64-validate-simd-vector-op)
+                             (function cl-cc/codegen::a64-validate-simd-vector-op)))
+      (dolist (inst (list
+                      (cl-cc/vm:make-vm-simd-vector-op
+                        :op :add :dst-array :r3 :lhs-array :r1 :rhs-array :r2
+                        :index-reg :r4 :lanes 4 :element-type :f64)
+                      (cl-cc/vm:make-vm-simd-vector-op
+                        :op :logand :dst-array :r3 :lhs-array :r1 :rhs-array :r2
+                        :index-reg :r4 :lanes 2 :element-type :f64)))
+        (expect
+          (handler-case
+              (progn (funcall validator inst) nil)
+            (error () t))
+          :to-be-truthy)))))

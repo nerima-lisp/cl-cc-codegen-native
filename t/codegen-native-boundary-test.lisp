@@ -234,13 +234,13 @@
     (expect
       (%native-emitter-octets
         (function cl-cc/codegen::emit-riscv64-vm-float-add)
-        (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1 :precision :f32))
+        (cl-cc/vm:make-vm-float-add :dst :f2 :lhs :f0 :rhs :f1 :precision :f32))
       :to-equalp
       #(83 1 16 0))
     (expect
       (%native-emitter-octets
         (function cl-cc/codegen::emit-riscv64-vm-float-add)
-        (cl-cc/vm:make-vm-float-add :dst :r2 :lhs :r0 :rhs :r1))
+        (cl-cc/vm:make-vm-float-add :dst :f2 :lhs :f0 :rhs :f1))
       :to-equalp
       #(83 1 16 2))))
 

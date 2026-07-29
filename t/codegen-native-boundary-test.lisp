@@ -63,4 +63,32 @@
     ;; A target described but not encodable is the failure mode this catches:
     ;; the description registry and the encoder tables are edited separately.
     (dolist (name '(:x86-64 :aarch64 :riscv64))
-      (expect (cl-cc/target:find-target name) :to-be-truthy))))
+      (expect (cl-cc/target:find-target name) :to-be-truthy)))
+
+  (it "reports AArch64 register-pool exhaustion without an unbound variable"
+    (let ((condition
+            (handler-case
+                (progn
+                  (cl-cc/codegen::target-register
+                   (make-instance 'cl-cc/codegen:aarch64-target)
+                   :r18)
+                  nil)
+              (error (caught) caught))))
+      (expect condition :to-be-truthy)
+      (expect (typep condition 'unbound-variable) :to-be nil)))
+
+  (it "provides the short WASM function constructor"
+    (let* ((constructor (find-symbol "MAKE-WASM-FUNC" "CL-CC/CODEGEN"))
+           (function (and constructor (symbol-function constructor))))
+      (expect constructor :to-be-truthy)
+      (expect (funcall function :wat-name "$regression") :to-be-truthy)))
+
+  (it "rejects heap opcodes interned in the caller package"
+    (let ((condition
+            (handler-case
+                (progn
+                  (cl-cc/emit:validate-ebpf-verifier-constraints
+                   '((alloc) (:exit)))
+                  nil)
+              (error (caught) caught))))
+      (expect condition :to-be-truthy))))

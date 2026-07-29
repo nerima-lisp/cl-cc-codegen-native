@@ -151,8 +151,10 @@ Supported verifier-friendly forms:
 (defun %ebpf-instruction-heap-op-p (insn)
   "Conservative guard: reject obvious heap operations for eBPF lowering."
   (and (consp insn)
-       (member (car insn) '(alloc malloc free make-array make-instance cons)
-               :test #'eq)))
+       (symbolp (car insn))
+       (member (symbol-name (car insn))
+               '("ALLOC" "MALLOC" "FREE" "MAKE-ARRAY" "MAKE-INSTANCE" "CONS")
+               :test #'string=)))
 
 (defun %ebpf-program-exits-p (instructions)
   (and instructions (eq (caar (last instructions)) :exit)))

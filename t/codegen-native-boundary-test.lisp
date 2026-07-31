@@ -545,6 +545,44 @@ only owns the accumulation."
                          #x0F #x81 #x02 #x00 #x00 #x00
                          #x0F #x0B))))
 
+(describe-sequential "x86-64-codegen-emitters.lisp: emit-x86-64-stack-canary-prologue / -epilogue"
+  ;; Both guard on (AND FRAME-POINTER-P (GETF CANARY-PLAN :ENABLED-P)) --
+  ;; covering the emission case plus both ways the guard can be false.
+  (it "prologue emits MOV RAX,FS:[0x28] + MOV [RBP+8],RAX when enabled and frame-pointer-p"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-stack-canary-prologue
+                sink (list :enabled-p t :guard-slot 8) t)))
+            :to-equalp #(#x64 #x48 #x8B #x04 #x25 #x28 #x00 #x00 #x00   ; MOV RAX, FS:[0x28]
+                         #x48 #x89 #x45 #x08)))                          ; MOV [RBP+8], RAX
+  (it "prologue emits nothing when the plan is disabled"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-stack-canary-prologue
+                sink (list :enabled-p nil :guard-slot 8) t)))
+            :to-equalp #()))
+  (it "prologue emits nothing when there is no frame pointer, even if enabled"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-stack-canary-prologue
+                sink (list :enabled-p t :guard-slot 8) nil)))
+            :to-equalp #()))
+  (it "epilogue emits the reload + FS compare + JE +2 + UD2 trap idiom when enabled"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-stack-canary-epilogue
+                sink (list :enabled-p t :guard-slot 8) t)))
+            :to-equalp #(#x48 #x8B #x45 #x08                            ; MOV RAX, [RBP+8]
+                         #x64 #x48 #x3B #x04 #x25 #x28 #x00 #x00 #x00   ; CMP RAX, FS:[0x28]
+                         #x0F #x84 #x02 #x00 #x00 #x00                  ; JE +2
+                         #x0F #x0B)))                                    ; UD2
+  (it "epilogue emits nothing when the plan is disabled"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-stack-canary-epilogue
+                sink (list :enabled-p nil :guard-slot 8) t)))
+            :to-equalp #())))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

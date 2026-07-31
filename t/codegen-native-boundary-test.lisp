@@ -4705,3 +4705,19 @@ only owns the accumulation."
                (cl-cc/codegen::emit-vm-num-eq
                 (cl-cc/vm:make-vm-num-eq :dst :r0 :lhs :r1 :rhs :r2) sink)))
             :to-equalp #(#x48 #x39 #xD1 #x0F #x94 #xC0 #x48 #x0F #xB6 #xC0))))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-const (integer branch)"
+  ;; The FLOATP branch (XMM path via MOVQ) is not covered this round --
+  ;; only the integer/coercion branch, which is a single MOV dst,imm64.
+  (it "emits MOV dst,imm64 for a plain integer value"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-const
+                (cl-cc/vm:make-vm-const :dst :r0 :value 42) sink)))
+            :to-equalp #(#x48 #xB8 #x2A #x00 #x00 #x00 #x00 #x00 #x00 #x00)))
+  (it "coerces a NIL value to 0 via VM-CONST-TO-INTEGER"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-const
+                (cl-cc/vm:make-vm-const :dst :r0 :value nil) sink)))
+            :to-equalp #(#x48 #xB8 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00))))

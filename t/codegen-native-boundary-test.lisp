@@ -4856,3 +4856,19 @@ only owns the accumulation."
        (cl-cc/vm:make-vm-simd-vector-op
         :op :logand :dst-array :r0 :lhs-array :r1 :rhs-array :r2
         :index-reg :r3 :lanes 2 :element-type :f64)))))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-x86-64-simd-address"
+  ;; Materializes [array-reg + index-reg*scale + 8] into R11 via LEA.
+  ;; base=rcx(1), index=rdx(2), dst=r11(11): REX.W+R+B(no X since index=2
+  ;; has no high bit)=0x4C, LEA=0x8D, ModRM(mod=01,reg=011,rm=100)=0x5C,
+  ;; SIB(scale,index=010,base=001), disp8=0x08.
+  (it "uses scale 4 for :i32 element type"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-simd-address 1 2 :i32 sink)))
+            :to-equalp #(#x4C #x8D #x5C #x91 #x08)))
+  (it "uses scale 8 for :f64 element type"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-simd-address 1 2 :f64 sink)))
+            :to-equalp #(#x4C #x8D #x5C #xD1 #x08))))

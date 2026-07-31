@@ -3697,3 +3697,37 @@ only owns the accumulation."
                (cl-cc/codegen::emit-a64-vm-halt
                 (cl-cc/vm:make-vm-halt :reg :r2) sink)))
             :to-equalp #(#xE0 #x03 #x02 #xAA))))
+
+(describe-sequential "aarch64-emitters.lisp: emit-a64-vm-jump / emit-a64-vm-jump-zero (PC-relative offsets)"
+  ;; Both compute BYTE-OFFSET = target-pos - current-pos, then divide by 4
+  ;; (instruction units) via ASH ... -2. A forward jump gives a positive
+  ;; imm; a backward jump gives a negative imm, which must round-trip
+  ;; through DEFENC's LOGAND masking as the correct two's-complement bit
+  ;; pattern within the field width -- covering both signs.
+  (it "emit-a64-vm-jump encodes B #imm26 for a forward jump (target 16 bytes ahead)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-jump
+                (cl-cc/vm:make-vm-jump :label "L1") sink 0
+                (let ((h (make-hash-table :test 'equal)))
+                  (setf (gethash "L1" h) 16)
+                  h))))
+            :to-equalp #(#x04 #x00 #x00 #x14)))
+  (it "emit-a64-vm-jump encodes B #imm26 for a backward jump (target 16 bytes behind) via two's-complement imm26"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-jump
+                (cl-cc/vm:make-vm-jump :label "L1") sink 16
+                (let ((h (make-hash-table :test 'equal)))
+                  (setf (gethash "L1" h) 0)
+                  h))))
+            :to-equalp #(#xFC #xFF #xFF #x17)))
+  (it "emit-a64-vm-jump-zero encodes CBZ Xn,#imm19 for a forward jump"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-jump-zero
+                (cl-cc/vm:make-vm-jump-zero :reg :r2 :label "L2") sink 0
+                (let ((h (make-hash-table :test 'equal)))
+                  (setf (gethash "L2" h) 16)
+                  h))))
+            :to-equalp #(#x82 #x00 #x00 #xB4))))

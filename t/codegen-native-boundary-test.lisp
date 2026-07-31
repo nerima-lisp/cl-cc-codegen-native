@@ -3867,3 +3867,46 @@ only owns the accumulation."
                          #x1F #x02 #x11 #xEB   ; CMP X16, X17
                          #x20 #x00 #x00 #x54   ; B.EQ #1
                          #x20 #x00 #x20 #xD4)))) ; BRK #1
+
+(describe-sequential "wasm-trampoline-fixnum.lisp: i31ref range analysis primitives"
+  (it "wasm-i31-range-p is T at both signed i31 boundaries"
+    (expect (and (cl-cc/codegen::wasm-i31-range-p cl-cc/codegen::+wasm-i31-min+)
+                 (cl-cc/codegen::wasm-i31-range-p cl-cc/codegen::+wasm-i31-max+)
+                 t)
+            :to-be t))
+  (it "wasm-i31-range-p is NIL one past either boundary, and for a non-integer"
+    (expect (cl-cc/codegen::wasm-i31-range-p (1+ cl-cc/codegen::+wasm-i31-max+)) :to-be nil)
+    (expect (cl-cc/codegen::wasm-i31-range-p (1- cl-cc/codegen::+wasm-i31-min+)) :to-be nil)
+    (expect (cl-cc/codegen::wasm-i31-range-p "42") :to-be nil))
+  (it "wasm-range-binop computes conservative result ranges for i64.add/sub/mul"
+    (expect (cl-cc/codegen::wasm-range-binop '(1 . 2) '(3 . 4) "i64.add") :to-equal '(4 . 6))
+    (expect (cl-cc/codegen::wasm-range-binop '(1 . 2) '(3 . 4) "i64.sub") :to-equal '(-3 . -1))
+    (expect (cl-cc/codegen::wasm-range-binop '(1 . 2) '(3 . 4) "i64.mul") :to-equal '(3 . 8)))
+  (it "wasm-range-binop widens bitwise ops to the full i31 range, and returns NIL for an unknown op or non-cons range"
+    (expect (cl-cc/codegen::wasm-range-binop '(1 . 2) '(3 . 4) "i64.and")
+            :to-equal (cons cl-cc/codegen::+wasm-i31-min+ cl-cc/codegen::+wasm-i31-max+))
+    (expect (cl-cc/codegen::wasm-range-binop '(1 . 2) '(3 . 4) "i64.div_s") :to-be nil)
+    (expect (cl-cc/codegen::wasm-range-binop nil '(3 . 4) "i64.add") :to-be nil))
+  (it "wasm-range-unary handles the increment/decrement/negate format strings and the popcnt/clz/ctz family"
+    (expect (cl-cc/codegen::wasm-range-unary '(1 . 2) "(i64.add ~A (i64.const 1))") :to-equal '(2 . 3))
+    (expect (cl-cc/codegen::wasm-range-unary '(1 . 2) "(i64.sub ~A (i64.const 1))") :to-equal '(0 . 1))
+    (expect (cl-cc/codegen::wasm-range-unary '(1 . 2) "(i64.sub (i64.const 0) ~A)") :to-equal '(-2 . -1))
+    (expect (cl-cc/codegen::wasm-range-unary '(1 . 2) "(i64.popcnt ~A)") :to-equal '(0 . 64))
+    (expect (cl-cc/codegen::wasm-range-unary '(1 . 2) "(i64.clz ~A)") :to-equal '(0 . 64))
+    (expect (cl-cc/codegen::wasm-range-unary '(1 . 2) "unrecognized") :to-be nil))
+  (it "wasm-range-i31-or-unknown passes through a range that fits, widens one that doesn't"
+    (expect (cl-cc/codegen::wasm-range-i31-or-unknown '(1 . 2)) :to-equal '(1 . 2))
+    (expect (cl-cc/codegen::wasm-range-i31-or-unknown
+             (cons (1- cl-cc/codegen::+wasm-i31-min+) 0))
+            :to-equal (cons cl-cc/codegen::+wasm-i31-min+ cl-cc/codegen::+wasm-i31-max+)))
+  (it "wasm-i64-const-wat-value parses (i64.const N), and returns NIL for a non-match, non-string, or malformed literal"
+    (expect (cl-cc/codegen::wasm-i64-const-wat-value "(i64.const 42)") :to-equal 42)
+    (expect (cl-cc/codegen::wasm-i64-const-wat-value "(i64.const -7)") :to-equal -7)
+    (expect (cl-cc/codegen::wasm-i64-const-wat-value "(i64.add 1 2)") :to-be nil)
+    (expect (cl-cc/codegen::wasm-i64-const-wat-value 42) :to-be nil)
+    (expect (cl-cc/codegen::wasm-i64-const-wat-value "(i64.const abc)") :to-be nil))
+  (it "wasm-i64-extended-i31-source extracts the inner register from an i31 sign-extension WAT shape"
+    (expect (cl-cc/codegen::wasm-i64-extended-i31-source
+             "(i64.extend_i32_s (i31.get_s $x))")
+            :to-equal "$x")
+    (expect (cl-cc/codegen::wasm-i64-extended-i31-source "(i64.const 1)") :to-be nil)))

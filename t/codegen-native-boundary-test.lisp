@@ -823,6 +823,15 @@ only owns the accumulation."
                 (cl-cc/vm:make-vm-float-div :dst :fa0 :lhs :fa1 :rhs :fa2) sink)))
             :to-equalp #(#x53 #x85 #xC5 #x1A))))
 
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-neg (define-unary-mov-emitter)"
+  (it "emits MOV RAX,RCX then NEG RAX (two's complement negation)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-neg
+                (cl-cc/vm:make-vm-neg :dst :r0 :src :r1) sink)))
+            :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x48 #xF7 #xD8)))) ; NEG RAX
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

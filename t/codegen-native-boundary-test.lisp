@@ -5263,3 +5263,50 @@ only owns the accumulation."
            (result (cl-cc/codegen::%lower-vm-inst-to-mir fn block inst reg-map)))
       (expect (cl-cc/mir:miri-op result) :to-be :nop)
       (expect (eq (cl-cc/codegen::%mir-meta-get result :vm-inst) inst) :to-be t))))
+
+(describe-sequential "isel-core.lisp: %lower-vm-inst-to-mir dispatch, remaining branches"
+  ;; Completes the dispatch cond: vm-call/vm-tail-call/vm-jump-zero/vm-halt.
+  (it "vm-call lowers to a :call MIR-INST: srcs = (func-reg . args), dst set, :defer-to-vm meta"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block
+                    (cl-cc/vm:make-vm-call :dst :r2 :func :r3 :args (quote (:r0 :r1)))
+                    reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :call)
+      (expect (cl-cc/mir:mirv-name (cl-cc/mir:miri-dst result)) :to-be :r2)
+      (expect (mapcar (function cl-cc/mir:mirv-name) (cl-cc/mir:miri-srcs result))
+              :to-equal (list :r3 :r0 :r1))
+      (expect (cl-cc/codegen::%mir-meta-get result :calling-convention) :to-be :defer-to-vm)))
+  (it "vm-tail-call lowers to a :tail-call MIR-INST: srcs = (func-reg . args), no dst"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block
+                    (cl-cc/vm:make-vm-tail-call :func :r3 :args (quote (:r0 :r1)))
+                    reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :tail-call)
+      (expect (cl-cc/mir:miri-dst result) :to-be nil)
+      (expect (mapcar (function cl-cc/mir:mirv-name) (cl-cc/mir:miri-srcs result))
+              :to-equal (list :r3 :r0 :r1))))
+  (it "vm-jump-zero lowers to a :branch MIR-INST with one src and no dst"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block (cl-cc/vm:make-vm-jump-zero :reg :r0 :label "target") reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :branch)
+      (expect (cl-cc/mir:miri-dst result) :to-be nil)
+      (expect (cl-cc/mir:mirv-name (first (cl-cc/mir:miri-srcs result))) :to-be :r0)))
+  (it "vm-halt lowers to a :ret MIR-INST (not :halt) with :toplevel-halt-p t in meta"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block (cl-cc/vm:make-vm-halt :reg :r0) reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :ret)
+      (expect (cl-cc/mir:miri-dst result) :to-be nil)
+      (expect (cl-cc/mir:mirv-name (first (cl-cc/mir:miri-srcs result))) :to-be :r0)
+      (expect (cl-cc/codegen::%mir-meta-get result :toplevel-halt-p) :to-be t))))

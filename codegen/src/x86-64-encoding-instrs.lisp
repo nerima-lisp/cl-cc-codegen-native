@@ -130,9 +130,13 @@ The caller (emit-vm-integer-add) ensures base/index come from regalloc which
 avoids RBP/R13/RSP/R12 for LEA operands."
   (emit-byte (rex-prefix :w 1 :r (ash dst -3) :x (ash index -3) :b (ash base -3)) stream)
   (emit-byte #x8D stream)
-  ;; MOD=00, REG=dst, R/M=100 (SIB follows).  Safe because regalloc avoids
-  ;; RBP/R13 as base (would need disp8/32) and RSP/R12 as index (invalid).
-  (emit-byte (logior (ash dst 3) #x04) stream)
+  ;; MOD=00, REG=dst&7 (REX.R carries the 4th bit), R/M=100 (SIB follows).
+  ;; Safe because regalloc avoids RBP/R13 as base (would need disp8/32) and
+  ;; RSP/R12 as index (invalid).  DST must be masked to 3 bits here: for
+  ;; DST in R8-R15, an unmasked (ASH DST 3) overflows into the MOD field
+  ;; (bit 3 of DST becomes bit 6 of this byte), silently turning MOD=00
+  ;; into MOD=01 without emitting the disp8 byte that MOD=01 requires.
+  (emit-byte (logior (ash (logand dst #x7) 3) #x04) stream)
   (emit-byte (sib (scale->sib-bits scale) index base) stream))
 
 (defun emit-lea-rr64-offset (dst base offset stream)

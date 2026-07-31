@@ -5009,3 +5009,84 @@ only owns the accumulation."
       (expect (subseq bytes 4 6) :to-equalp #(#x49 #xBB))             ; REX.W + B8+3 (mov r11, imm64)
       (expect (subseq bytes 14 17) :to-equalp #(#x49 #xFF #xD3))      ; REX.W + FF /2 (call r11)
       (expect (subseq bytes 17 21) :to-equalp #(#xF2 #x0F #x10 #xD0))))) ; movsd xmm2, xmm0
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-print"
+  ;; Same FFI/load-time-value CALL pattern as emit-vm-sin, minus the
+  ;; MOVSD-store suffix -- PRINT returns nothing. Checks fixed bytes
+  ;; around the non-reproducible resolved rt_print address the same way.
+  (it "src != RDI: emits MOV RDI,src first, then MOV R11+imm64, CALL R11 (16 bytes)"
+    (let ((bytes (%collect-emitted-octets
+                  (lambda (sink)
+                    (cl-cc/codegen::emit-vm-print
+                     (cl-cc/vm:make-vm-print :reg :r0) sink)))))
+      (expect (length bytes) :to-be 16)
+      (expect (subseq bytes 0 3) :to-equalp #(#x48 #x89 #xC7))     ; mov rdi, rax
+      (expect (subseq bytes 3 5) :to-equalp #(#x49 #xBB))          ; mov r11, imm64 (prefix)
+      (expect (subseq bytes 13 16) :to-equalp #(#x49 #xFF #xD3)))) ; call r11
+  (it "src = RDI: elides the MOV, emitting only MOV R11+imm64, CALL R11 (13 bytes)"
+    (let ((bytes (%collect-emitted-octets
+                  (lambda (sink)
+                    (cl-cc/codegen::emit-vm-print
+                     (cl-cc/vm:make-vm-print :reg :r5) sink)))))
+      (expect (length bytes) :to-be 13)
+      (expect (subseq bytes 0 2) :to-equalp #(#x49 #xBB))
+      (expect (subseq bytes 10 13) :to-equalp #(#x49 #xFF #xD3)))))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-values-regs / emit-vm-mv-bind-regs"
+  (it "emit-vm-values-regs moves only the registers that don't already hold their target"
+    ;; reg0=r1(rcx)->RAX (moved), reg1=r2(rdx)==RDX (elided), reg2=r3(rbx)->RCX (moved)
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-values-regs
+                (cl-cc/vm:make-vm-values-regs :reg0 :r1 :reg1 :r2 :reg2 :r3 :count 3)
+                sink)))
+            :to-equalp #(#x48 #x89 #xC8   ; mov rax, rcx
+                         #x48 #x89 #xD9))) ; mov rcx, rbx
+  (it "emit-vm-mv-bind-regs moves only the registers that don't already hold their target"
+    ;; dst0=r4(rsi)<-RAX (moved), dst1=r5(rdi)<-RDX (moved)
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-mv-bind-regs
+                (cl-cc/vm:make-vm-mv-bind-regs :dst-regs (quote (:r4 :r5)) :count 2)
+                sink)))
+            :to-equalp #(#x48 #x89 #xC6   ; mov rsi, rax
+                         #x48 #x89 #xD7))) ; mov rdi, rdx
+  (it "emit-vm-mv-bind-regs emits nothing when dst already holds its target register"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-mv-bind-regs
+                (cl-cc/vm:make-vm-mv-bind-regs :dst-regs (quote (:r0)) :count 1)
+                sink)))
+            :to-equalp #())))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-integer-add"
+  ;; FR-171: LEA fast path when dst == lhs and neither register is
+  ;; excluded from mod=00+SIB addressing (RBP/R13 as base, RSP/R12 as index).
+  (it "dst == lhs, no excluded registers: emits one LEA instead of MOV+ADD"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-integer-add
+                (cl-cc/vm:make-vm-integer-add :dst :r0 :lhs :r0 :rhs :r1) sink)))
+            :to-equalp #(#x48 #x8D #x04 #x08))) ; lea rax, [rax+rcx*1]
+  (it "dst != lhs: falls back to MOV dst,lhs + ADD dst,rhs"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-integer-add
+                (cl-cc/vm:make-vm-integer-add :dst :r2 :lhs :r0 :rhs :r1) sink)))
+            :to-equalp #(#x48 #x89 #xC2   ; mov rdx, rax
+                         #x48 #x01 #xCA))) ; add rdx, rcx
+  (it "dst == lhs == R8 (extended register): LEA's REG field must be masked to 3 bits"
+    ;; Regression for a real bug found while deriving these bytes:
+    ;; EMIT-LEA-RR64 used to build its fixed ModR/M byte as (ASH DST 3),
+    ;; without masking DST to 3 bits first. For DST in R8-R15, bit 3 of
+    ;; DST (always 1) lands on bit 6 of that byte -- MOD's low bit --
+    ;; silently turning MOD=00 into MOD=01 without emitting the disp8
+    ;; byte MOD=01 requires, corrupting the encoded instruction stream.
+    ;; R8 is a real reachable DST here: *VM-REG-MAP* maps :R6 to +R8+,
+    ;; and a real regalloc result can assign any VM register to physical
+    ;; :R8-:R15 (see *PHYS-REG-TO-X86-CODE*).
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-integer-add
+                (cl-cc/vm:make-vm-integer-add :dst :r6 :lhs :r6 :rhs :r1) sink)))
+            :to-equalp #(#x4D #x8D #x04 #x08)))) ; lea r8, [r8+rcx*1]

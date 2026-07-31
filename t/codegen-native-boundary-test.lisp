@@ -455,6 +455,31 @@ only owns the accumulation."
     (expect (cl-cc/codegen::wasm-memory-fill-wat "(local.get 0)" "(i32.const 0)" "(local.get 1)")
             :to-equal "(memory.fill (local.get 0) (i32.const 0) (local.get 1))")))
 
+(describe-sequential "x86-64-codegen-emitters.lisp: speculation-barrier / CFI-entry / phys-code lookup"
+  (it "emit-x86-64-speculation-barrier emits a fixed 3-byte LFENCE (0F AE E8)"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-x86-64-speculation-barrier sink)))
+            :to-equalp #(#x0F #xAE #xE8)))
+  (it "emit-x86-64-cfi-entry emits 4-byte ENDBR64 (F3 0F 1E FA) when the plan requests it"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-cfi-entry sink (list :entry-opcode :endbr64))))
+            :to-equalp #(#xF3 #x0F #x1E #xFA)))
+  (it "emit-x86-64-cfi-entry emits nothing when the plan doesn't request :endbr64"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-x86-64-cfi-entry sink nil)))
+            :to-equalp #()))
+  (it "x86-64-speculative-execution-mitigation-enabled-p is NIL by default, T when either flag is set"
+    (expect (cl-cc/codegen::x86-64-speculative-execution-mitigation-enabled-p) :to-be nil)
+    (let ((cl-cc/codegen::*x86-64-spectre-mitigations-enabled* t))
+      (expect (and (cl-cc/codegen::x86-64-speculative-execution-mitigation-enabled-p) t) :to-be t))
+    (let ((cl-cc/codegen::*x86-64-use-retpoline* t))
+      (expect (and (cl-cc/codegen::x86-64-speculative-execution-mitigation-enabled-p) t) :to-be t)))
+  (it "x86-64-phys-code->keyword reverse-looks-up a known code, and returns NIL for RSP (deliberately not GP-allocatable)"
+    (expect (cl-cc/codegen::x86-64-phys-code->keyword 0) :to-be :rax)
+    (expect (cl-cc/codegen::x86-64-phys-code->keyword 5) :to-be :rbp)
+    (expect (cl-cc/codegen::x86-64-phys-code->keyword 4) :to-be nil)))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

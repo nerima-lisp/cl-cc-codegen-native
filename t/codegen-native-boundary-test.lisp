@@ -751,6 +751,36 @@ only owns the accumulation."
                   sink)))
               :to-equalp #(#x13 #x05 #x03 #x00)))))
 
+(describe-sequential "riscv64-codegen.lisp: define-riscv64-binary-emitter family (add/sub/mul/div/rem)"
+  ;; Each is a single R-type instruction differing only in funct3/funct7 --
+  ;; add/sub share funct3=0 (differing only in funct7's bit 5), mul/div/rem
+  ;; share the M-extension's funct7=1 (differing only in funct3).
+  (it "emit-riscv64-vm-add encodes ADD a0,t0,t1 (funct3=0, funct7=0)"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-add
+                             (cl-cc/vm:make-vm-add :dst :a0 :lhs :t0 :rhs :t1) sink)))
+            :to-equalp #(#x33 #x85 #x62 #x00)))
+  (it "emit-riscv64-vm-sub encodes SUB a0,t0,t1 (funct3=0, funct7=0x20)"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-sub
+                             (cl-cc/vm:make-vm-sub :dst :a0 :lhs :t0 :rhs :t1) sink)))
+            :to-equalp #(#x33 #x85 #x62 #x40)))
+  (it "emit-riscv64-vm-mul encodes MUL a0,t0,t1 (M-extension, funct3=0, funct7=1)"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-mul
+                             (cl-cc/vm:make-vm-mul :dst :a0 :lhs :t0 :rhs :t1) sink)))
+            :to-equalp #(#x33 #x85 #x62 #x02)))
+  (it "emit-riscv64-vm-div encodes DIV a0,t0,t1 (M-extension, funct3=4, funct7=1)"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-div
+                             (cl-cc/vm:make-vm-div :dst :a0 :lhs :t0 :rhs :t1) sink)))
+            :to-equalp #(#x33 #xC5 #x62 #x02)))
+  (it "emit-riscv64-vm-rem encodes REM a0,t0,t1 (M-extension, funct3=6, funct7=1)"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-rem
+                             (cl-cc/vm:make-vm-rem :dst :a0 :lhs :t0 :rhs :t1) sink)))
+            :to-equalp #(#x33 #xE5 #x62 #x02))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

@@ -426,7 +426,19 @@ only owns the accumulation."
 
   (it-property "wasm-array-type-name is total: never signals for any keyword, known or not"
       ((kind (gen-keyword '("fixnum" "float" "char" "eqref" "unknown-a" "unknown-b" "random-tag"))))
-    (expect (stringp (cl-cc/codegen::wasm-array-type-name kind)) :to-be-truthy)))
+    (expect (stringp (cl-cc/codegen::wasm-array-type-name kind)) :to-be-truthy))
+
+  (it-property "wasm-normalize-array-element-kind is total: always one of the 4 valid kinds, for any designator"
+      ((designator (gen-keyword '("fixnum" "integer" "float" "double-float" "character"
+                                   "any" "eqref" "totally-unrecognized" "another-unknown"))))
+    (expect (member (cl-cc/codegen::wasm-normalize-array-element-kind designator)
+                     '(:fixnum :float :char :eqref))
+            :to-be-truthy))
+
+  (it-property "wasm-i31-range-p agrees with a direct interval check across a wide integer range"
+      ((n (gen-integer :min -2000000000 :max 2000000000)))
+    (expect (and (cl-cc/codegen::wasm-i31-range-p n) t)
+            :to-be (and (<= cl-cc/codegen::+wasm-i31-min+ n cl-cc/codegen::+wasm-i31-max+) t))))
 
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))

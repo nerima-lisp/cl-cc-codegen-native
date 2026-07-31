@@ -6,12 +6,6 @@
     # release tests pass, so it is less likely to land a broken build.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # Pinned to a release tag. A bare `github:nerima-lisp/cl-weave` follows
-    # that repository's default branch, so an upstream push to main would
-    # break this repository's CI without warning. This used to be a
-    # `flake = false` source tree handed to the runner through an environment
-    # variable; it is a normal flake input now, which is what lets ASDF find
-    # cl-weave through CL_SOURCE_REGISTRY like any other dependency.
     cl-cc-ast = {
       url = "github:nerima-lisp/cl-cc-ast";
       flake = false;
@@ -91,6 +85,12 @@
       url = "github:nerima-lisp/cl-host-kit/v0.2.1";
       flake = false;
     };
+    # Pinned to a release tag. A bare `github:nerima-lisp/cl-weave` follows
+    # that repository's default branch, so an upstream push to main would
+    # break this repository's CI without warning. This used to be a
+    # `flake = false` source tree handed to the runner through an environment
+    # variable; it is a normal flake input now, which is what lets ASDF find
+    # cl-weave through CL_SOURCE_REGISTRY like any other dependency.
     cl-weave = {
       url = "github:nerima-lisp/cl-weave/v1.1.0";
       inputs.nixpkgs.follows = "nixpkgs";

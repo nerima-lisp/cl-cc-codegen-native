@@ -16,6 +16,13 @@
 ;;;; a system named after it, and so `asdf:load-system "cl-cc-codegen-native"`
 ;;;; pulls the whole native backend.
 
+;;; This form comes first, before any defsystem. ASDF binds *package* to
+;;; ASDF-USER only for a file it loads itself; read any other way -- a REPL
+;;; `load`, an editor evaluating the buffer, flake.nix parsing :version -- the
+;;; file is read in whatever package happens to be current. Saying it makes the
+;;; file self-contained.
+(in-package #:asdf-user)
+
 (asdf:defsystem "cl-cc-codegen-native"
   :description "Native code generation for the cl-cc Common Lisp compiler: register allocation, instruction selection, encoding and object emission"
   :author "takeokunn <bararararatty@gmail.com>"

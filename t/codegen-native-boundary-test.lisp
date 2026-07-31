@@ -884,6 +884,29 @@ only owns the accumulation."
                 (cl-cc/vm:make-vm-logcount :dst :r0 :src :r1) sink)))
             :to-equalp #(#xF3 #x48 #x0F #xB8 #xC1))))
 
+(describe-sequential "x86-64-emit-ops-bits.lisp: emit-vm-bswap / emit-vm-inc / emit-vm-dec"
+  (it "emit-vm-bswap emits MOV dst,src + BSWAP dst (byte-swap low 32 bits)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-bswap
+                (cl-cc/vm:make-vm-bswap :dst :r0 :src :r1) sink)))
+            :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x0F #xC8)))     ; BSWAP EAX
+  (it "emit-vm-inc emits MOV dst,src + ADD dst,1"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-inc
+                (cl-cc/vm:make-vm-inc :dst :r0 :src :r1) sink)))
+            :to-equalp #(#x48 #x89 #xC8       ; MOV RAX, RCX
+                         #x48 #x83 #xC0 #x01))) ; ADD RAX, 1
+  (it "emit-vm-dec emits MOV dst,src + SUB dst,1"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-dec
+                (cl-cc/vm:make-vm-dec :dst :r0 :src :r1) sink)))
+            :to-equalp #(#x48 #x89 #xC8       ; MOV RAX, RCX
+                         #x48 #x83 #xE8 #x01)))) ; SUB RAX, 1
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

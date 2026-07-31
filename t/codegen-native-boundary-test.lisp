@@ -907,6 +907,27 @@ only owns the accumulation."
             :to-equalp #(#x48 #x89 #xC8       ; MOV RAX, RCX
                          #x48 #x83 #xE8 #x01)))) ; SUB RAX, 1
 
+(describe-sequential "x86-64-emit-ops-bits.lisp: emit-vm-lognot / emit-vm-integer-length"
+  (it "emit-vm-lognot emits MOV dst,src + NOT dst (define-unary-mov-emitter)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-lognot
+                (cl-cc/vm:make-vm-lognot :dst :r0 :src :r1) sink)))
+            :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x48 #xF7 #xD0))) ; NOT RAX
+  (it "emit-vm-integer-length (dst != src): XOR dst,dst + TEST + JE +12 + LZCNT + NEG + ADD,64 + 2x NOP (fixed 22 bytes)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-integer-length
+                (cl-cc/vm:make-vm-integer-length :dst :r0 :src :r1) sink)))
+            :to-equalp #(#x48 #x31 #xC0       ; XOR RAX, RAX
+                         #x48 #x85 #xC9       ; TEST RCX, RCX
+                         #x74 #x0C            ; JE +12
+                         #xF3 #x48 #x0F #xBD #xC1 ; LZCNT RAX, RCX
+                         #x48 #xF7 #xD8       ; NEG RAX
+                         #x48 #x83 #xC0 #x40  ; ADD RAX, 64
+                         #x90 #x90))))        ; NOP; NOP (fixed 22-byte size)
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

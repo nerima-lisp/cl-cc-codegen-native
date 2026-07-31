@@ -62,8 +62,8 @@ could leave the external process itself still running.
 --script scripts/run-coverage.lisp`) runs the suite a second time under
 SBCL's `sb-cover` via cl-weave's built-in `:coverage` support — no adapter —
 and prints expression/branch percentages for `codegen/src`, `regalloc/src`
-and `emit/src`. As of 2026-07 that baseline is **22.5% expression, 24.9%
-branch** (8176/36383, 640/2572): `t/` is a boundary and regression suite, not
+and `emit/src`. As of 2026-07 that baseline is **22.6% expression, 24.9%
+branch** (8218/36383, 641/2572): `t/` is a boundary and regression suite, not
 exhaustive per-opcode coverage of the three backends' ~30 source files.
 Raising it requires writing tests, not just measuring — this only wires the
 measurement up. `checks.coverage` is informational and does not fail the

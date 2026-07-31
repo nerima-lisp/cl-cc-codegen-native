@@ -4803,3 +4803,22 @@ only owns the accumulation."
         (expect result :to-be 11)
         (expect (coerce (nreverse bytes) '(simple-array (unsigned-byte 8) (*)))
                 :to-equalp #(#x49 #x89 #xE3)))))) ; MOV R11, RSP
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-aref / emit-vm-aset"
+  ;; +x86-64-array-data-offset+ = 8, scale is always 8 (word-addressed
+  ;; layout). dst=r0(rax), array-reg=r1(rcx) as base, index-reg=r2(rdx) as
+  ;; index: [rcx + rdx*8 + 8], REX.W + 8B/89 /r, ModR/M mod=01,reg=0,rm=100
+  ;; (SIB follows) = 0x44, SIB scale=8(11),index=rdx(010),base=rcx(001) =
+  ;; 0xD1, disp8 = 0x08.
+  (it "emit-vm-aref emits MOV dst, [base + index*8 + 8]"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-aref
+                (cl-cc/vm:make-vm-aref :dst :r0 :array-reg :r1 :index-reg :r2) sink)))
+            :to-equalp #(#x48 #x8B #x44 #xD1 #x08)))
+  (it "emit-vm-aset emits MOV [base + index*8 + 8], src"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-aset
+                (cl-cc/vm:make-vm-aset :array-reg :r1 :index-reg :r2 :val-reg :r0) sink)))
+            :to-equalp #(#x48 #x89 #x44 #xD1 #x08))))

@@ -868,6 +868,22 @@ only owns the accumulation."
                          #x0F #x95 #xC0       ; SETNE AL
                          #x48 #x0F #xB6 #xC0)))) ; MOVZX RAX, AL
 
+(describe-sequential "x86-64-emit-ops-bits.lisp: emit-vm-not / emit-vm-logcount"
+  (it "emit-vm-not emits TEST src,src + SETE dst8 + MOVZX dst,dst8 (logical NOT: zero -> 1, nonzero -> 0)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-not
+                (cl-cc/vm:make-vm-not :dst :r0 :src :r1) sink)))
+            :to-equalp #(#x48 #x85 #xC9       ; TEST RCX, RCX
+                         #x0F #x94 #xC0       ; SETE AL
+                         #x48 #x0F #xB6 #xC0))) ; MOVZX RAX, AL
+  (it "emit-vm-logcount emits a single POPCNT dst,src"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-logcount
+                (cl-cc/vm:make-vm-logcount :dst :r0 :src :r1) sink)))
+            :to-equalp #(#xF3 #x48 #x0F #xB8 #xC1))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

@@ -505,6 +505,16 @@ only owns the accumulation."
        (cl-cc/vm:make-vm-jump :label "unknown-label")
        (make-hash-table :test 'equal)))))
 
+(describe-sequential "x86-64-codegen-emitters.lisp: emit-x86-64-stack-probes"
+  ;; Emits one 9-byte OR [RSP-page*4096], 0 per guard page; PAGE runs 1..N,
+  ;; so a 2-probe call must show two DIFFERENT displacements (-4096, -8192),
+  ;; verifying the loop actually increments rather than repeating page 1.
+  (it "emits one 9-byte OR probe per guard page, at increasing negative displacements"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-x86-64-stack-probes sink 2)))
+            :to-equalp #(#x48 #x83 #x8C #x24 #x00 #xF0 #xFF #xFF #x00   ; page 1: [RSP-4096]
+                         #x48 #x83 #x8C #x24 #x00 #xE0 #xFF #xFF #x00)))) ; page 2: [RSP-8192]
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

@@ -1,12 +1,20 @@
+;;;; cl-cc-codegen.asd — per-target code generation
+;;;;
+;;;; Instruction selection, encoding and emission for x86-64, AArch64,
+;;;; RISC-V and WebAssembly. The isel/ rules and the per-target *-codegen
+;;;; files are kept together with the encoders because a target's addressing
+;;;; modes, its instruction-selection rules and its encoder tables change in
+;;;; the same commit far more often than any of them changes alone.
+
 (asdf:defsystem :cl-cc-codegen
-  :description "Per-target code generation: x86-64, AArch64, WASM backends"
+  :description "Per-target code generation: x86-64, AArch64, RISC-V, WASM backends"
   :author "takeokunn"
   :license "MIT"
   :homepage "https://github.com/nerima-lisp/cl-cc"
   :version "0.1.0"
   :depends-on (:cl-cc-bootstrap :cl-cc-vm :cl-cc-mir :cl-cc-target
                :cl-cc-binary
-               :cl-cc-optimize :cl-cc-regalloc)
+               :cl-cc-optimize :cl-cc-regalloc :cl-process-kit)
   :pathname "src"
   :serial t
   :components
@@ -28,6 +36,7 @@
        (:file "x86-64-codegen-data")
          (:file "x86-64-codegen-core")
         (:file "x86-64-codegen-emitters")
+        (:file "x86-64-lea-peephole")
         (:file "aarch64-codegen")
         (:file "ppc64-codegen")
         (:file "win-cfg")
@@ -55,6 +64,9 @@
     (:file "wasm-features")
     (:file "wasm-string-builtins")
     (:file "wasm-trampoline")
+   (:file "wasm-trampoline-gc")
+   (:file "wasm-trampoline-fixnum")
+   (:file "wasm-trampoline-proposals")
    (:file "wasm-trampoline-tables")
    (:file "wasm-trampoline-emit")
    (:file "wasm-trampoline-build")

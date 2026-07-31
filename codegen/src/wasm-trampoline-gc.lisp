@@ -1,22 +1,9 @@
-;;;; packages/codegen/src/wasm-trampoline-arrays.lisp — FR-211 Wasm GC Array Helpers
-;;;;
-;;;; Specialized array WAT emitters for typed Wasm GC arrays.
-;;;; Covers fixnum, float, char, and eqref array kinds with boxing/unboxing.
-;;;;
-;;;; Defines: wasm-normalize-array-element-kind, wasm-array-type-name,
-;;;;           wasm-array-type-ref, wasm-array-reg-record-kind,
-;;;;           wasm-array-reg-kind, wasm-array-reg-copy-kind,
-;;;;           wasm-vector-literal-kind, wasm-value-to-array-element-wat,
-;;;;           wasm-array-default-wat, wasm-reg-to-array-element-wat,
-;;;;           wasm-array-element-to-eqref-wat, wasm-ref-as-non-null-wat,
-;;;;           wasm-ref-test-wat, wasm-ref-eq-wat, wasm-struct-new-immutable-wat,
-;;;;           emit-wasm-typed-select-wat, wasm-array-cast-wat,
-;;;;           wasm-vector-literal-wat, wasm-array-new-wat,
-;;;;           wasm-array-fill-wat, wasm-array-get-eqref-wat,
-;;;;           wasm-array-set-wat, wasm-array-len-wat, wasm-array-copy-wat,
-;;;;           define-wasm-unary-wat, define-wasm-binary-wat
-;;;;
-;;;; Load order: after wasm-trampoline.lisp, before wasm-trampoline-ranges.lisp.
+;;;; packages/emit/src/wasm-trampoline-gc.lisp - WASM GC array-type WAT helpers
+;;;
+;;; Split out of wasm-trampoline.lisp in 2026-07 (it had grown past 999 lines
+;;; mixing several independent concerns). Everything here is FR-211: array
+;;; kind normalization, WASM GC array/struct construction, load/store, and
+;;; ref-cast WAT emission for one instruction at a time.
 
 (in-package :cl-cc/codegen)
 
@@ -33,13 +20,18 @@
     ((t :any nil) :eqref)
     (otherwise :eqref)))
 
+(defparameter *wasm-array-type-names*
+  (quote ((:fixnum . "$fixnum_array_t")
+          (:float . "$float_array_t")
+          (:char . "$char_array_t")
+          (:eqref . "$eqref_array_t")))
+  "WAT type name for each normalized Wasm GC specialized array kind.
+See WASM-NORMALIZE-ARRAY-ELEMENT-KIND, which guarantees KIND is always
+one of these four keys before this table is consulted.")
+
 (defun wasm-array-type-name (kind)
   "Return the WAT type name for specialized array KIND."
-  (case (wasm-normalize-array-element-kind kind)
-    (:fixnum "$fixnum_array_t")
-    (:float "$float_array_t")
-    (:char "$char_array_t")
-    (otherwise "$eqref_array_t")))
+  (cdr (assoc (wasm-normalize-array-element-kind kind) *wasm-array-type-names*)))
 
 (defun wasm-array-type-ref (kind)
   "Return a non-null ref type for specialized array KIND."
@@ -121,9 +113,28 @@
   "Return FR-285 ref.eq WAT for GC reference identity."
   (format nil "(ref.eq ~A ~A)" lhs-wat rhs-wat))
 
+(defun wasm-any-convert-extern-wat (extern-wat)
+  "Return FR-286 any.convert_extern WAT for JS externref -> GC anyref."
+  (format nil "(any.convert_extern ~A)" extern-wat))
+
+(defun wasm-extern-convert-any-wat (any-wat)
+  "Return FR-286 extern.convert_any WAT for GC anyref -> JS externref."
+  (format nil "(extern.convert_any ~A)" any-wat))
+
 (defun wasm-struct-new-immutable-wat (type-name &rest field-wats)
   "Return FR-247 struct.new_immutable WAT."
   (format nil "(struct.new_immutable ~A~{ ~A~})" type-name field-wats))
+
+(defun wasm-array-new-immutable-wat (kind &rest element-wats)
+  "Return FR-247 array.new_immutable WAT."
+  (format nil "(array.new_immutable ~A ~D~{ ~A~})"
+          (wasm-array-type-name kind) (length element-wats) element-wats))
+
+(defun wasm-struct-get-packed-wat (type-name field-index ref-wat &key signed-p)
+  "Return FR-283 packed struct field access WAT."
+  (format nil "(~A ~A ~D ~A)"
+          (if signed-p "struct.get_s" "struct.get_u")
+          type-name field-index ref-wat))
 
 (defun emit-wasm-typed-select-wat (result-type cond-wat then-wat else-wat)
   "Return FR-279 typed select WAT for reference-typed conditionals."
@@ -159,6 +170,16 @@
         (format nil "(array.new_default ~A ~A)" type-name size-wat)
         (format nil "(array.new ~A ~A ~A)" type-name init-wat size-wat))))
 
+(defun wasm-array-new-data-wat (kind data-segment offset-wat size-wat)
+  "Return FR-249 array.new_data WAT for static array initialization."
+  (format nil "(array.new_data ~A ~A ~A ~A)"
+          (wasm-array-type-name kind) data-segment offset-wat size-wat))
+
+(defun wasm-array-new-elem-wat (kind elem-segment offset-wat size-wat)
+  "Return FR-249 array.new_elem WAT for element-segment array initialization."
+  (format nil "(array.new_elem ~A ~A ~A ~A)"
+          (wasm-array-type-name kind) elem-segment offset-wat size-wat))
+
 (defun wasm-array-fill-wat (reg-map array-reg value-reg start-wat len-wat)
   "Return FR-284 array.fill WAT for ARRAY-REG."
   (let* ((kind (if *wasm-gc-array-types-enabled*
@@ -169,19 +190,31 @@
     (format nil "(array.fill ~A ~A ~A ~A ~A)"
             (wasm-array-type-name kind) arr start-wat val len-wat)))
 
-;;; Unary WAT emitters: (name opcode param). Logic: single-format string.
-(defmacro define-wasm-unary-wat (name opcode param &optional doc)
-  "Generate a one-argument WAT emitter that wraps PARAM in (OPCODE ...)."
-  `(defun ,name (,param)
-     ,(or doc (format nil "Return WAT for ~A." opcode))
-     (format nil ,(concatenate 'string "(" opcode " ~A)") ,param)))
+(defun wasm-array-init-data-wat (kind array-wat data-segment dst-wat src-wat len-wat)
+  "Return FR-284 array.init_data WAT."
+  (format nil "(array.init_data ~A ~A ~A ~A ~A ~A)"
+          (wasm-array-type-name kind) data-segment array-wat dst-wat src-wat len-wat))
 
-;;; Binary WAT emitters: (name opcode param1 param2). Logic: single-format string.
-(defmacro define-wasm-binary-wat (name opcode param1 param2 &optional doc)
-  "Generate a two-argument WAT emitter that wraps PARAM1 PARAM2 in (OPCODE ...)."
-  `(defun ,name (,param1 ,param2)
-     ,(or doc (format nil "Return WAT for ~A." opcode))
-     (format nil ,(concatenate 'string "(" opcode " ~A ~A)") ,param1 ,param2)))
+(defun wasm-array-init-elem-wat (kind array-wat elem-segment dst-wat src-wat len-wat)
+  "Return FR-284 array.init_elem WAT."
+  (format nil "(array.init_elem ~A ~A ~A ~A ~A ~A)"
+          (wasm-array-type-name kind) elem-segment array-wat dst-wat src-wat len-wat))
+
+(defun wasm-array-load2-u-wat (kind array-wat index-wat)
+  "Return FR-250 array.load2_u WAT for packed multibyte access."
+  (format nil "(array.load2_u ~A ~A ~A)" (wasm-array-type-name kind) array-wat index-wat))
+
+(defun wasm-array-load4-u-wat (kind array-wat index-wat)
+  "Return FR-250 array.load4_u WAT for packed multibyte access."
+  (format nil "(array.load4_u ~A ~A ~A)" (wasm-array-type-name kind) array-wat index-wat))
+
+(defun wasm-array-store2-wat (kind array-wat index-wat value-wat)
+  "Return FR-250 array.store2 WAT for packed multibyte access."
+  (format nil "(array.store2 ~A ~A ~A ~A)" (wasm-array-type-name kind) array-wat index-wat value-wat))
+
+(defun wasm-array-store4-wat (kind array-wat index-wat value-wat)
+  "Return FR-250 array.store4 WAT for packed multibyte access."
+  (format nil "(array.store4 ~A ~A ~A ~A)" (wasm-array-type-name kind) array-wat index-wat value-wat))
 
 (defun wasm-array-get-eqref-wat (reg-map array-reg index-reg)
   "Return WAT for VM AREF on ARRAY-REG/INDEX-REG, boxing typed elements."

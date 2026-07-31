@@ -3,13 +3,6 @@
 (defparameter *x86-64-host-probe-timeout-seconds* 2
   "Timeout in seconds for external host feature probe commands.")
 
-(defmacro x86-64-with-host-probe-timeout (&body body)
-  `(handler-case
-       (sb-ext:with-timeout *x86-64-host-probe-timeout-seconds*
-         ,@body)
-     (sb-ext:timeout ()
-       nil)))
-
 (defun x86-64-unlikely-branch-prefix-p (inst)
   "Return T when INST should carry the legacy x86 unlikely-branch hint prefix."
   (and (typep inst 'vm-jump-zero)
@@ -395,13 +388,10 @@ formats such as:\n
   "Return best-effort host CPU feature text, or NIL when probing fails."
   (when (x86-64-host-x86-p)
     (or (ignore-errors
-          (when (and (find-package :uiop)
-                     (fboundp 'uiop:run-program))
-            (x86-64-with-host-probe-timeout
-              (uiop:run-program
-               '("sysctl" "-a")
-               :output :string
-               :ignore-error-status t))))
+          (process-kit:process-result-stdout
+           (process-kit:run "sysctl" (list "-a")
+                             :search t
+                             :timeout *x86-64-host-probe-timeout-seconds*)))
         (ignore-errors
           (with-open-file (in "/proc/cpuinfo" :direction :input)
             (let ((buf (make-string-output-stream)))
@@ -439,20 +429,17 @@ Priority:
 1) Darwin: `sysctl -a` output token scan
 2) Linux: `/proc/cpuinfo` token scan
 
-All probe failures are treated as "unknown" => NIL.
+All probe failures are treated as \"unknown\" => NIL.
 Environment variables remain the primary override path."
    (and (x86-64-host-x86-p)
     (or
      ;; macOS / Darwin path
      (ignore-errors
-      (when (and (find-package :uiop)
-                 (fboundp 'uiop:run-program))
-        (let ((out (x86-64-with-host-probe-timeout
-                     (uiop:run-program
-                      '("sysctl" "-a")
-                      :output :string
-                      :ignore-error-status t))))
-          (and (x86-64-ibrs-token-present-p out) t))))
+       (let ((out (process-kit:process-result-stdout
+                   (process-kit:run "sysctl" (list "-a")
+                                     :search t
+                                     :timeout *x86-64-host-probe-timeout-seconds*))))
+         (and (x86-64-ibrs-token-present-p out) t)))
    ;; Linux path
    (ignore-errors
      (with-open-file (in "/proc/cpuinfo" :direction :input)

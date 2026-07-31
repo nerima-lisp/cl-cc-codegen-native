@@ -4822,3 +4822,37 @@ only owns the accumulation."
                (cl-cc/codegen::emit-vm-aset
                 (cl-cc/vm:make-vm-aset :array-reg :r1 :index-reg :r2 :val-reg :r0) sink)))
             :to-equalp #(#x48 #x89 #x44 #xD1 #x08))))
+
+(describe-sequential "x86-64-emit-ops.lisp: x86-64-simd-element-scale / x86-64-validate-simd-vector-op"
+  (it "x86-64-simd-element-scale returns 4 bytes for :i32 lanes"
+    (expect (cl-cc/codegen::x86-64-simd-element-scale :i32) :to-be 4))
+  (it "x86-64-simd-element-scale returns 8 bytes for :f64 lanes"
+    (expect (cl-cc/codegen::x86-64-simd-element-scale :f64) :to-be 8))
+  (it "x86-64-simd-element-scale signals an error for an unsupported element type"
+    (signals error (cl-cc/codegen::x86-64-simd-element-scale :i8)))
+  (it "x86-64-validate-simd-vector-op accepts 4-lane :i32 :add (no error)"
+    (expect (and (cl-cc/codegen::x86-64-validate-simd-vector-op
+                  (cl-cc/vm:make-vm-simd-vector-op
+                   :op :add :dst-array :r0 :lhs-array :r1 :rhs-array :r2
+                   :index-reg :r3 :lanes 4 :element-type :i32))
+                 t)
+            :to-be nil))
+  (it "x86-64-validate-simd-vector-op accepts 2-lane :f64 :mul (no error)"
+    (expect (and (cl-cc/codegen::x86-64-validate-simd-vector-op
+                  (cl-cc/vm:make-vm-simd-vector-op
+                   :op :mul :dst-array :r0 :lhs-array :r1 :rhs-array :r2
+                   :index-reg :r3 :lanes 2 :element-type :f64))
+                 t)
+            :to-be nil))
+  (it "x86-64-validate-simd-vector-op rejects 2-lane :i32 (only 4/8 lanes supported for :i32)"
+    (signals error
+      (cl-cc/codegen::x86-64-validate-simd-vector-op
+       (cl-cc/vm:make-vm-simd-vector-op
+        :op :add :dst-array :r0 :lhs-array :r1 :rhs-array :r2
+        :index-reg :r3 :lanes 2 :element-type :i32))))
+  (it "x86-64-validate-simd-vector-op rejects :f64 :logand (bitwise ops unsupported for float lanes)"
+    (signals error
+      (cl-cc/codegen::x86-64-validate-simd-vector-op
+       (cl-cc/vm:make-vm-simd-vector-op
+        :op :logand :dst-array :r0 :lhs-array :r1 :rhs-array :r2
+        :index-reg :r3 :lanes 2 :element-type :f64)))))

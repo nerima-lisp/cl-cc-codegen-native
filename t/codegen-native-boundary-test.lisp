@@ -5421,3 +5421,30 @@ only owns the accumulation."
         (expect (cl-cc/mir:mirc-value (first (cl-cc/mir:miri-srcs (third insts)))) :to-be 7)
         (expect (cl-cc/mir:mirv-name (cl-cc/mir:miri-dst (fifth insts))) :to-be :r4)
         (expect (cl-cc/mir:mirv-name (first (cl-cc/mir:miri-srcs (fifth insts)))) :to-be :r3)))))
+
+(describe-sequential "isel-core.lisp: isel-vm-program (full VM -> MIR -> ISel -> VM round trip)"
+  ;; *ISEL-X86-64-RULES* (isel/x86-64-rules.lisp) only covers arithmetic/
+  ;; addressing tiles -- it has NO rule whose pattern head is :ret, :jump,
+  ;; :call, etc. So VM-RET here can never be tile-matched; the maximal-munch
+  ;; walk signals ISEL-DIAGNOSTIC for it, and %EMIT-SELECTED-VM-INST's
+  ;; HANDLER-CASE falls back to the original VM-RET instruction preserved
+  ;; in the MIR instruction's :VM-INST metadata -- exactly what
+  ;; %LOWER-VM-INST-TO-MIR stashed there for this purpose. CONST and ADD do
+  ;; have rules (:x86-mov-imm, :x86-reg, :x86-add-reg all match), so they
+  ;; round-trip through real tile selection rather than a fallback.
+  (it "selects x86-64 tiles for CONST/ADD and falls back to the original VM-RET"
+    (let* ((program (cl-cc/vm:make-vm-program
+                      :instructions
+                      (list (cl-cc/vm:make-vm-const :dst :r0 :value 5)
+                            (cl-cc/vm:make-vm-add :dst :r2 :lhs :r0 :rhs :r1)
+                            (cl-cc/vm:make-vm-ret :reg :r2))))
+           (result (cl-cc/codegen::isel-vm-program program :target :x86-64))
+           (insts (cl-cc/vm:vm-program-instructions result)))
+      (expect (length insts) :to-be 3)
+      (expect (typep (first insts) (quote cl-cc/vm:vm-const)) :to-be t)
+      (expect (cl-cc/vm:vm-value (first insts)) :to-be 5)
+      (expect (typep (second insts) (quote cl-cc/vm:vm-add)) :to-be t)
+      (expect (cl-cc/vm:vm-lhs (second insts)) :to-be :r0)
+      (expect (cl-cc/vm:vm-rhs (second insts)) :to-be :r1)
+      (expect (typep (third insts) (quote cl-cc/vm:vm-ret)) :to-be t)
+      (expect (cl-cc/vm:vm-reg (third insts)) :to-be :r2))))

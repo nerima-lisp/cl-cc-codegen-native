@@ -849,6 +849,25 @@ only owns the accumulation."
                          #x48 #x83 #xE0 #x01   ; AND RAX, 1
                          #x59))))              ; POP RCX
 
+(describe-sequential "x86-64-emit-ops-logical.lisp: emit-vm-logeqv / emit-vm-logtest"
+  (it "emit-vm-logeqv emits MOV dst,lhs + XOR dst,rhs + NOT dst (bitwise XNOR)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-logeqv
+                (cl-cc/vm:make-vm-logeqv :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x48 #x31 #xD0   ; XOR RAX, RDX
+                         #x48 #xF7 #xD0))) ; NOT RAX
+  (it "emit-vm-logtest emits MOV dst,lhs + AND dst,rhs + SETNE dst8 + MOVZX dst,dst8"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-logtest
+                (cl-cc/vm:make-vm-logtest :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x89 #xC8       ; MOV RAX, RCX
+                         #x48 #x21 #xD0       ; AND RAX, RDX (sets ZF)
+                         #x0F #x95 #xC0       ; SETNE AL
+                         #x48 #x0F #xB6 #xC0)))) ; MOVZX RAX, AL
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

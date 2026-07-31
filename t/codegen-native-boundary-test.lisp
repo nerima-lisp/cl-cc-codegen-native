@@ -5090,3 +5090,24 @@ only owns the accumulation."
                (cl-cc/codegen::emit-vm-integer-add
                 (cl-cc/vm:make-vm-integer-add :dst :r6 :lhs :r6 :rhs :r1) sink)))
             :to-equalp #(#x4D #x8D #x04 #x08)))) ; lea r8, [r8+rcx*1]
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-add-bignum (DEFINE-BIGNUM-BRIDGE-EMITTER shape)"
+  ;; Another real-FFI/load-time-value CALL, same non-reproducible-address
+  ;; caveat as emit-vm-sin/emit-vm-print above: checks the fixed bytes
+  ;; around the 8-byte cl_cc_bignum_add address. No VM-ADD-BIGNUM class
+  ;; exists in cl-cc/vm -- this emitter only needs the VM-DST/VM-LHS/
+  ;; VM-RHS reader protocol, which VM-ADD (a plain binop) already
+  ;; provides, so that's the fixture used here.
+  ;; MOV RDI,lhs (3) + MOV RSI,rhs (3) + REX.W+B8/r11 (2) + <8 addr bytes>
+  ;; + REX.W+FF/2 CALL r11 (3) + MOV dst,RAX (3) = 22 bytes.
+  (it "is 22 bytes: MOV RDI/RSI args, MOV R11+imm64, CALL R11, MOV dst,RAX"
+    (let ((bytes (%collect-emitted-octets
+                  (lambda (sink)
+                    (cl-cc/codegen::emit-vm-add-bignum
+                     (cl-cc/vm:make-vm-add :dst :r2 :lhs :r0 :rhs :r1) sink)))))
+      (expect (length bytes) :to-be 22)
+      (expect (subseq bytes 0 3) :to-equalp #(#x48 #x89 #xC7))   ; mov rdi, rax
+      (expect (subseq bytes 3 6) :to-equalp #(#x48 #x89 #xCE))   ; mov rsi, rcx
+      (expect (subseq bytes 6 8) :to-equalp #(#x49 #xBB))        ; mov r11, imm64 (prefix)
+      (expect (subseq bytes 16 19) :to-equalp #(#x49 #xFF #xD3)) ; call r11
+      (expect (subseq bytes 19 22) :to-equalp #(#x48 #x89 #xC2))))) ; mov rdx, rax

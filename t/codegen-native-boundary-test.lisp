@@ -4763,3 +4763,28 @@ only owns the accumulation."
                 sink)))
             :to-equalp #(#x49 #xBB #x00 #x00 #x00 #x00 #x00 #x00 #xF0 #x7F
                          #x66 #x49 #x0F #x6E #xC3))))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-move (integer vs float dispatch, dst=src elision)"
+  ;; *CURRENT-FLOAT-VREGS* defaults to NIL, so X86-64-FLOAT-VREG-P is NIL
+  ;; for every register unless a test explicitly binds it -- the integer
+  ;; path is the default, the float path needs explicit opt-in per test.
+  (it "integer path, dst != src: emits MOV dst,src"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-move
+                (cl-cc/vm:make-vm-move :dst :r0 :src :r1) sink)))
+            :to-equalp #(#x48 #x89 #xC8)))
+  (it "integer path, dst = src: emits nothing"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-move
+                (cl-cc/vm:make-vm-move :dst :r0 :src :r0) sink)))
+            :to-equalp #()))
+  (it "float path (via *current-float-vregs*), dst != src: emits MOVSD xmm-dst,xmm-src"
+    (let ((cl-cc/codegen::*current-float-vregs* (make-hash-table :test 'eq)))
+      (setf (gethash :r0 cl-cc/codegen::*current-float-vregs*) t)
+      (expect (%collect-emitted-octets
+               (lambda (sink)
+                 (cl-cc/codegen::emit-vm-move
+                  (cl-cc/vm:make-vm-move :dst :r0 :src :r1) sink)))
+              :to-equalp #(#xF2 #x0F #x10 #xC1)))))

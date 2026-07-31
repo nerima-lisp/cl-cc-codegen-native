@@ -145,6 +145,13 @@ for, so they round-trip through the MIR pipeline unchanged instead of
 being silently dropped or erroring."
   (mir-emit block :nop :meta (list :vm-inst vm-inst)))
 
+(defparameter *%vm-arith-class->mir-op*
+  '((vm-add . :add) (vm-sub . :sub) (vm-mul . :mul))
+  "Maps a VM-ADD/VM-SUB/VM-MUL class name to its MIR arithmetic op keyword.
+VM-ADD/-SUB/-MUL all lower through the identical dst/lhs/rhs MIR-EMIT
+shape below -- only the op keyword differs, so that's the only thing
+this table needs to carry.")
+
 (defun %lower-vm-inst-to-mir (fn block inst reg-map)
   "Lower one VM instruction into BLOCK, preserving the original instruction."
   (cond
@@ -159,20 +166,8 @@ being silently dropped or erroring."
                :dst (%vm-reg-value fn (vm-dst inst) reg-map)
                :srcs (list (%vm-reg-value fn (vm-src inst) reg-map))
                :meta (list :vm-inst inst)))
-    ((eq (type-of inst) 'vm-add)
-     (mir-emit block :add
-               :dst (%vm-reg-value fn (vm-dst inst) reg-map)
-               :srcs (list (%vm-reg-value fn (vm-lhs inst) reg-map)
-                           (%vm-reg-value fn (vm-rhs inst) reg-map))
-               :meta (list :vm-inst inst)))
-    ((eq (type-of inst) 'vm-sub)
-     (mir-emit block :sub
-               :dst (%vm-reg-value fn (vm-dst inst) reg-map)
-               :srcs (list (%vm-reg-value fn (vm-lhs inst) reg-map)
-                           (%vm-reg-value fn (vm-rhs inst) reg-map))
-               :meta (list :vm-inst inst)))
-    ((eq (type-of inst) 'vm-mul)
-     (mir-emit block :mul
+    ((cdr (assoc (type-of inst) *%vm-arith-class->mir-op* :test #'eq))
+     (mir-emit block (cdr (assoc (type-of inst) *%vm-arith-class->mir-op* :test #'eq))
                :dst (%vm-reg-value fn (vm-dst inst) reg-map)
                :srcs (list (%vm-reg-value fn (vm-lhs inst) reg-map)
                            (%vm-reg-value fn (vm-rhs inst) reg-map))

@@ -5236,6 +5236,24 @@ only owns the accumulation."
       (expect (cl-cc/mir:mirv-name (cl-cc/mir:miri-dst result)) :to-be :r2)
       (expect (mapcar (function cl-cc/mir:mirv-name) (cl-cc/mir:miri-srcs result))
               :to-equal (list :r0 :r1))))
+  (it "vm-sub lowers to a :sub MIR-INST (via *%vm-arith-class->mir-op*, not a repeated cond clause)"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block (cl-cc/vm:make-vm-sub :dst :r2 :lhs :r0 :rhs :r1) reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :sub)
+      (expect (mapcar (function cl-cc/mir:mirv-name) (cl-cc/mir:miri-srcs result))
+              :to-equal (list :r0 :r1))))
+  (it "vm-mul lowers to a :mul MIR-INST (via *%vm-arith-class->mir-op*, not a repeated cond clause)"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block (cl-cc/vm:make-vm-mul :dst :r2 :lhs :r0 :rhs :r1) reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :mul)
+      (expect (mapcar (function cl-cc/mir:mirv-name) (cl-cc/mir:miri-srcs result))
+              :to-equal (list :r0 :r1))))
   (it "vm-jump lowers to a :jump MIR-INST with no dst and no srcs"
     (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
            (block (cl-cc/mir:mirf-entry fn))

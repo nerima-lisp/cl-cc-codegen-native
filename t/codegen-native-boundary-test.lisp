@@ -4622,3 +4622,33 @@ only owns the accumulation."
             :to-equalp #(#x48 #x39 #xC8   ; CMP RAX, RCX
                          #x40 #x0F #x94 #xC6 ; SETE SIL (REX needed for SIL)
                          #x48 #x0F #xB6 #xF6)))) ; MOVZX RSI, SIL
+
+(describe-sequential "x86-64-emit-ops-bits.lisp: emit-vm-min / emit-vm-max (define-cmov-emitter)"
+  (it "emit-vm-min: MOV dst,lhs + CMP dst,rhs + CMOVG dst,rhs (signed, branchless)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-min
+                (cl-cc/vm:make-vm-min :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x48 #x39 #xD0   ; CMP RAX, RDX
+                         #x48 #x0F #x4F #xC2))) ; CMOVG RAX, RDX
+  (it "emit-vm-max: MOV dst,lhs + CMP dst,rhs + CMOVL dst,rhs"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-max
+                (cl-cc/vm:make-vm-max :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x89 #xC8
+                         #x48 #x39 #xD0
+                         #x48 #x0F #x4C #xC2)))) ; CMOVL RAX, RDX
+
+(describe-sequential "x86-64-emit-ops-bits.lisp: emit-vm-select"
+  (it "emits MOV dst,else + TEST cond,cond + CMOVNE dst,then (branchless ?:)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-select
+                (cl-cc/vm:make-vm-select :dst :r0 :cond-reg :r1
+                                          :then-reg :r2 :else-reg :r3)
+                sink)))
+            :to-equalp #(#x48 #x89 #xD8       ; MOV RAX, RBX (else)
+                         #x48 #x85 #xC9       ; TEST RCX, RCX (cond)
+                         #x48 #x0F #x45 #xC2)))) ; CMOVNE RAX, RDX (then)

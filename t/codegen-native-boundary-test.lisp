@@ -440,6 +440,21 @@ only owns the accumulation."
     (expect (and (cl-cc/codegen::wasm-i31-range-p n) t)
             :to-be (and (<= cl-cc/codegen::+wasm-i31-min+ n cl-cc/codegen::+wasm-i31-max+) t))))
 
+(describe-sequential "wasm-trampoline-proposals.lisp: copysign / storage-condition / table-index WAT primitives"
+  (it "wasm-copysign-wat emits f64.copysign(magnitude, sign)"
+    (expect (cl-cc/codegen::wasm-copysign-wat "(local.get 0)" "(local.get 1)")
+            :to-equal "(f64.copysign (local.get 0) (local.get 1))"))
+  (it "wasm-storage-condition-wat encodes the 17-character symbol name as fixed i32.const byte elements"
+    (expect (cl-cc/codegen::wasm-storage-condition-wat)
+            :to-equal "(struct.new $symbol_t (struct.new $string_t (array.new_fixed $bytes_array_t 17 (i32.const 83) (i32.const 84) (i32.const 79) (i32.const 82) (i32.const 65) (i32.const 71) (i32.const 69) (i32.const 45) (i32.const 67) (i32.const 79) (i32.const 78) (i32.const 68) (i32.const 73) (i32.const 84) (i32.const 73) (i32.const 79) (i32.const 78))) (ref.null eq))"))
+  (it "wasm-table-index-type-wat is i32 by default (*wasm-table64-enabled* and *wasm-memory64-enabled* both default NIL)"
+    (expect (cl-cc/codegen::wasm-table-index-type-wat) :to-equal "i32"))
+  (it "wasm-table-const-wat formats VALUE at the active (default i32) table-index width"
+    (expect (cl-cc/codegen::wasm-table-const-wat 42) :to-equal "(i32.const 42)"))
+  (it "wasm-memory-fill-wat omits the (memory N) clause by default (*wasm-multiple-memories-enabled* defaults NIL)"
+    (expect (cl-cc/codegen::wasm-memory-fill-wat "(local.get 0)" "(i32.const 0)" "(local.get 1)")
+            :to-equal "(memory.fill (local.get 0) (i32.const 0) (local.get 1))")))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

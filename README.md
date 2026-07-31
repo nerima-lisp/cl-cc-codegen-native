@@ -1,4 +1,4 @@
-# cl-cc-codegen-native
+# cl-cc-codegen-native  [![CI](https://github.com/nerima-lisp/cl-cc-codegen-native/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nerima-lisp/cl-cc-codegen-native/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Native code generation for the [cl-cc](https://github.com/nerima-lisp/cl-cc)
 Common Lisp compiler: register allocation, instruction selection and encoding
@@ -34,6 +34,41 @@ vendored.
 nix develop
 nix flake check
 ```
+
+Running the test suite directly (outside `nix flake check`) goes through
+`scripts/with-timeout.pl`, the same bounded-execution wrapper `cl-weave` and
+its sibling nerima-lisp repositories use, rather than a bare `timeout` — that
+binary is GNU coreutils and is not present by default on macOS:
+
+```sh
+perl scripts/with-timeout.pl 120 sbcl --script run-tests.lisp
+```
+
+### External tool invocation
+
+Host CPU-feature probing (`sysctl -a` / `/proc/cpuinfo`) and the optional
+Wasm toolchain integration (`wasm-opt`, `wat2wasm`, `wasm2wat`, `shasum`/
+`sha*sum`/`openssl`) go through
+[`cl-process-kit`](https://github.com/nerima-lisp/cl-process-kit) directly —
+no adapter — rather than bare `uiop:run-program` wrapped in
+`sb-ext:with-timeout`. A timed-out probe or tool invocation now escalates
+SIGTERM → SIGKILL against the child's own process group; the previous
+`sb-ext:with-timeout` approach only unwound the calling Lisp thread, which
+could leave the external process itself still running.
+
+### Coverage
+
+`nix build .#checks.coverage` (or `perl scripts/with-timeout.pl 300 sbcl
+--script scripts/run-coverage.lisp`) runs the suite a second time under
+SBCL's `sb-cover` via cl-weave's built-in `:coverage` support — no adapter —
+and prints expression/branch percentages for `codegen/src`, `regalloc/src`
+and `emit/src`. As of 2026-07 that baseline is **17.7% expression, 21.6%
+branch** (6486/36597, 555/2572): `t/` is a boundary and regression suite, not
+exhaustive per-opcode coverage of the three backends' ~30 source files.
+Raising it requires writing tests, not just measuring — this only wires the
+measurement up. `checks.coverage` is informational and does not fail the
+build; wire `:coverage-minimum-expression`/`:coverage-minimum-branch` into
+`cl-cc-codegen-native.asd`'s `test-op` once there is a real target to hold.
 
 ## License
 

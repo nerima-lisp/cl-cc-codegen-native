@@ -781,6 +781,25 @@ only owns the accumulation."
                              (cl-cc/vm:make-vm-rem :dst :a0 :lhs :t0 :rhs :t1) sink)))
             :to-equalp #(#x33 #xE5 #x62 #x02))))
 
+(describe-sequential "riscv64-codegen.lisp: emit-riscv64-vm-float-add (precision-dispatched)"
+  ;; RISCV64-FREG resolves the *separate* FP register file (:fa0/:fa1/...),
+  ;; not RISCV64-REG's integer file -- FADD.S/FADD.D share funct3=rm=0,
+  ;; differing only in funct7 (0 vs 1), the F/D extension split.
+  (it "at :f32 precision: FADD.S fa0,fa1,fa2 (funct7=0)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-float-add
+                (cl-cc/vm:make-vm-float-add :dst :fa0 :lhs :fa1 :rhs :fa2 :precision :f32)
+                sink)))
+            :to-equalp #(#x53 #x85 #xC5 #x00)))
+  (it "at :f64 precision (default): FADD.D fa0,fa1,fa2 (funct7=1)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-float-add
+                (cl-cc/vm:make-vm-float-add :dst :fa0 :lhs :fa1 :rhs :fa2)
+                sink)))
+            :to-equalp #(#x53 #x85 #xC5 #x02))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

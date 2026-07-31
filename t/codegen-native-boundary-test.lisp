@@ -658,6 +658,36 @@ only owns the accumulation."
       (cl-cc/codegen::wasm-array-reg-copy-kind reg-map :r1 :r0)
       (expect (cl-cc/codegen::wasm-array-reg-kind reg-map :r1) :to-be :eqref))))
 
+(describe-sequential "riscv64-codegen.lisp: emit-riscv64-vm-ret / -halt / -move"
+  ;; RISCV64-REG has NO :Rn-digit generic fallback (unlike AArch64/x86-64) --
+  ;; it only resolves real ABI register keywords (:t0, :a0, ...) via
+  ;; *RISCV64-REG-NUMBER*, so fixtures must use those, not :r0-style keys.
+  (it "emit-riscv64-vm-ret encodes JALR x0,ra,0 (0x8067) as 4 little-endian bytes"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-ret
+                             (cl-cc/vm:make-vm-ret) sink)))
+            :to-equalp #(#x67 #x80 #x00 #x00)))
+  (it "emit-riscv64-vm-halt emits ADDI a0,t0,0 when the result register isn't already A0"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-halt
+                             (cl-cc/vm:make-vm-halt :reg :t0) sink)))
+            :to-equalp #(#x13 #x85 #x02 #x00)))
+  (it "emit-riscv64-vm-halt emits nothing when the result is already in A0"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-halt
+                             (cl-cc/vm:make-vm-halt :reg :a0) sink)))
+            :to-equalp #()))
+  (it "emit-riscv64-vm-move emits ADDI dst,src,0 when dst and src differ"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-move
+                             (cl-cc/vm:make-vm-move :dst :t1 :src :t0) sink)))
+            :to-equalp #(#x13 #x83 #x02 #x00)))
+  (it "emit-riscv64-vm-move emits nothing when dst and src are the same register"
+    (expect (%collect-emitted-octets
+             (lambda (sink) (cl-cc/codegen::emit-riscv64-vm-move
+                             (cl-cc/vm:make-vm-move :dst :t0 :src :t0) sink)))
+            :to-equalp #())))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

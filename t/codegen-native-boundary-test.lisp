@@ -800,6 +800,29 @@ only owns the accumulation."
                 sink)))
             :to-equalp #(#x53 #x85 #xC5 #x02))))
 
+(describe-sequential "riscv64-codegen.lisp: emit-riscv64-vm-float-sub / -mul / -div (default :f64)"
+  ;; Same precision-dispatch shape as float-add; only the funct7 differs
+  ;; per operation (F/D extension funct7 assignments: SUB=4/5, MUL=8/9,
+  ;; DIV=12/13 for single/double).
+  (it "emit-riscv64-vm-float-sub encodes FSUB.D fa0,fa1,fa2 (funct7=5)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-float-sub
+                (cl-cc/vm:make-vm-float-sub :dst :fa0 :lhs :fa1 :rhs :fa2) sink)))
+            :to-equalp #(#x53 #x85 #xC5 #x0A)))
+  (it "emit-riscv64-vm-float-mul encodes FMUL.D fa0,fa1,fa2 (funct7=9)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-float-mul
+                (cl-cc/vm:make-vm-float-mul :dst :fa0 :lhs :fa1 :rhs :fa2) sink)))
+            :to-equalp #(#x53 #x85 #xC5 #x12)))
+  (it "emit-riscv64-vm-float-div encodes FDIV.D fa0,fa1,fa2 (funct7=13)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-float-div
+                (cl-cc/vm:make-vm-float-div :dst :fa0 :lhs :fa1 :rhs :fa2) sink)))
+            :to-equalp #(#x53 #x85 #xC5 #x1A))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

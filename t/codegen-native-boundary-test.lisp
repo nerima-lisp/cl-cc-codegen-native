@@ -4014,3 +4014,73 @@ only owns the accumulation."
                          #x48 #x85 #xD2   ; TEST RDX, RDX
                          #x74 #x04        ; JE +4
                          #x48 #x83 #xC0 #x01)))) ; ADD RAX, 1
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-integer-mul-high-u / -s (via emit-mul-high-sequence)"
+  ;; Locking in current byte-for-byte output BEFORE consolidating these two
+  ;; into a shared macro (same pattern as the emit-vm-and/-or round):
+  ;; both wrap EMIT-MUL-HIGH-SEQUENCE with a trailing MOV dst,R11, differing
+  ;; only in the SIGNEDP flag threaded through to MUL vs IMUL.
+  (it "emit-vm-integer-mul-high-u: MOV R11,rhs+PUSH+PUSH+MOV RAX,lhs+MUL R11+MOV R11,RDX+POP+POP+MOV dst,R11"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-integer-mul-high-u
+                (cl-cc/vm:make-vm-integer-mul-high-u :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x49 #x89 #xD3   ; MOV R11, RDX
+                         #x50            ; PUSH RAX
+                         #x52            ; PUSH RDX
+                         #x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x49 #xF7 #xE3   ; MUL R11 (unsigned)
+                         #x49 #x89 #xD3   ; MOV R11, RDX
+                         #x5A            ; POP RDX
+                         #x58            ; POP RAX
+                         #x4C #x89 #xD8))) ; MOV RAX, R11
+  (it "emit-vm-integer-mul-high-s: same skeleton but IMUL R11 (signed)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-integer-mul-high-s
+                (cl-cc/vm:make-vm-integer-mul-high-s :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x49 #x89 #xD3
+                         #x50
+                         #x52
+                         #x48 #x89 #xC8
+                         #x49 #xF7 #xEB   ; IMUL R11 (signed)
+                         #x49 #x89 #xD3
+                         #x5A
+                         #x58
+                         #x4C #x89 #xD8))))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-truncate / emit-vm-rem (via emit-idiv-sequence)"
+  ;; Same shared-skeleton relationship as mul-high-u/-s, one level removed:
+  ;; both wrap EMIT-IDIV-SEQUENCE (save/setup/CQO/IDIV/restore) with a
+  ;; trailing MOV dst,R11, differing only in RESULT-IS-REMAINDER selecting
+  ;; RAX (quotient) vs RDX (remainder) into R11 before the restore.
+  (it "emit-vm-truncate takes the quotient (RAX) branch of emit-idiv-sequence"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-truncate
+                (cl-cc/vm:make-vm-truncate :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x49 #x89 #xD3   ; MOV R11, RDX
+                         #x50            ; PUSH RAX
+                         #x52            ; PUSH RDX
+                         #x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x48 #x99       ; CQO
+                         #x49 #xF7 #xFB   ; IDIV R11
+                         #x49 #x89 #xC3   ; MOV R11, RAX (quotient)
+                         #x5A            ; POP RDX
+                         #x58            ; POP RAX
+                         #x4C #x89 #xD8))) ; MOV RAX, R11
+  (it "emit-vm-rem takes the remainder (RDX) branch of emit-idiv-sequence"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-rem
+                (cl-cc/vm:make-vm-rem :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x49 #x89 #xD3
+                         #x50
+                         #x52
+                         #x48 #x89 #xC8
+                         #x48 #x99
+                         #x49 #xF7 #xFB
+                         #x49 #x89 #xD3   ; MOV R11, RDX (remainder)
+                         #x5A
+                         #x58
+                         #x4C #x89 #xD8))))

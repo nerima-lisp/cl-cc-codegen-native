@@ -438,37 +438,30 @@ IMUL sets OF on overflow when the full result does not fit in the destination.")
 (define-bignum-bridge-emitter emit-vm-sub-bignum "cl_cc_bignum_sub" "vm-sub via bignum runtime call.")
 (define-bignum-bridge-emitter emit-vm-mul-bignum "cl_cc_bignum_mul" "vm-mul via bignum runtime call.")
 
-(defun emit-vm-integer-mul-high-u (inst stream)
-  "vm-integer-mul-high-u: dst = unsigned high 64 bits of lhs*rhs."
-  (let ((dst (vm-reg-to-x86 (vm-dst inst)))
-        (lhs (vm-reg-to-x86 (vm-lhs inst)))
-        (rhs (vm-reg-to-x86 (vm-rhs inst))))
-    (emit-mul-high-sequence lhs rhs nil stream)
-    (emit-mov-rr64 dst +r11+ stream)))
+(defmacro define-r11-result-binop-emitter (fn-name sequence-fn flag description)
+  "Define an emitter that computes into R11 via SEQUENCE-FN(lhs, rhs, FLAG,
+stream) then moves the result to DST. Shared by the mul-high and
+idiv-derived (truncate/rem) emitter pairs, which differ only in which
+sequence function is called and which boolean FLAG it's given."
+  `(defun ,fn-name (inst stream)
+     ,description
+     (let ((dst (vm-reg-to-x86 (vm-dst inst)))
+           (lhs (vm-reg-to-x86 (vm-lhs inst)))
+           (rhs (vm-reg-to-x86 (vm-rhs inst))))
+       (,sequence-fn lhs rhs ,flag stream)
+       (emit-mov-rr64 dst +r11+ stream))))
 
-(defun emit-vm-integer-mul-high-s (inst stream)
-  "vm-integer-mul-high-s: dst = signed high 64 bits of lhs*rhs."
-  (let ((dst (vm-reg-to-x86 (vm-dst inst)))
-        (lhs (vm-reg-to-x86 (vm-lhs inst)))
-        (rhs (vm-reg-to-x86 (vm-rhs inst))))
-    (emit-mul-high-sequence lhs rhs t stream)
-    (emit-mov-rr64 dst +r11+ stream)))
+(define-r11-result-binop-emitter emit-vm-integer-mul-high-u emit-mul-high-sequence nil
+  "vm-integer-mul-high-u: dst = unsigned high 64 bits of lhs*rhs.")
 
-(defun emit-vm-truncate (inst stream)
-  "vm-truncate: dst = truncate(lhs / rhs)  -- quotient, truncate-toward-zero."
-  (let ((dst (vm-reg-to-x86 (vm-dst inst)))
-        (lhs (vm-reg-to-x86 (vm-lhs inst)))
-        (rhs (vm-reg-to-x86 (vm-rhs inst))))
-    (emit-idiv-sequence lhs rhs nil stream)                 ; [0..17]
-    (emit-mov-rr64 dst +r11+ stream)))                      ; [18 +3] MOV dst, R11
+(define-r11-result-binop-emitter emit-vm-integer-mul-high-s emit-mul-high-sequence t
+  "vm-integer-mul-high-s: dst = signed high 64 bits of lhs*rhs.")
 
-(defun emit-vm-rem (inst stream)
-  "vm-rem: dst = rem(lhs, rhs)  -- remainder, truncate semantics (same sign as lhs)."
-  (let ((dst (vm-reg-to-x86 (vm-dst inst)))
-        (lhs (vm-reg-to-x86 (vm-lhs inst)))
-        (rhs (vm-reg-to-x86 (vm-rhs inst))))
-    (emit-idiv-sequence lhs rhs t stream)                   ; [0..17]
-    (emit-mov-rr64 dst +r11+ stream)))                      ; [18 +3] MOV dst, R11
+(define-r11-result-binop-emitter emit-vm-truncate emit-idiv-sequence nil
+  "vm-truncate: dst = truncate(lhs / rhs)  -- quotient, truncate-toward-zero.")
+
+(define-r11-result-binop-emitter emit-vm-rem emit-idiv-sequence t
+  "vm-rem: dst = rem(lhs, rhs)  -- remainder, truncate semantics (same sign as lhs).")
 
 ;;; Floor Division: vm-div, vm-mod
 ;;;

@@ -832,6 +832,23 @@ only owns the accumulation."
             :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
                          #x48 #xF7 #xD8)))) ; NEG RAX
 
+(describe-sequential "x86-64-emit-ops-logical.lisp: emit-vm-logbitp"
+  ;; PUSH RCX; MOV RCX,lhs (bit position); MOV dst,rhs (integer); SAR
+  ;; dst,CL; AND dst,1; POP RCX -- the only x86-64 emitter this session
+  ;; needing RCX explicitly for a variable shift count (x86-64 shifts by
+  ;; a runtime count always read CL, not any other register).
+  (it "emits the PUSH/MOV/MOV/SAR/AND/POP sequence to test bit LHS of integer RHS"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-logbitp
+                (cl-cc/vm:make-vm-logbitp :dst :r0 :lhs :r3 :rhs :r2) sink)))
+            :to-equalp #(#x51                  ; PUSH RCX
+                         #x48 #x89 #xD9        ; MOV RCX, RBX (lhs, the bit position)
+                         #x48 #x89 #xD0        ; MOV RAX, RDX (rhs, the integer)
+                         #x48 #xD3 #xF8        ; SAR RAX, CL
+                         #x48 #x83 #xE0 #x01   ; AND RAX, 1
+                         #x59))))              ; POP RCX
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

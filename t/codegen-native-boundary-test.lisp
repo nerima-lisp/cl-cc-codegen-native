@@ -688,6 +688,24 @@ only owns the accumulation."
                              (cl-cc/vm:make-vm-move :dst :t0 :src :t0) sink)))
             :to-equalp #())))
 
+(describe-sequential "riscv64-codegen.lisp: emit-riscv64-vm-spill-store / -load"
+  ;; *CURRENT-RISCV64-SPILL-BASE-REG* defaults to +RV-FP+ (X8/S0);
+  ;; RISCV64-SPILL-SLOT-OFFSET(1) = 0 - 1*8 = -8, a negative S/I-type
+  ;; immediate -- covers RISCV-SIGNED-FIELD's two's-complement packing
+  ;; with a real negative value, not just the field-packing unit tests.
+  (it "emit-riscv64-vm-spill-store encodes SD t0,-8(fp)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-spill-store
+                (cl-cc/regalloc:make-vm-spill-store :src-reg :t0 :slot 1) sink)))
+            :to-equalp #(#x23 #x3C #x54 #xFE)))
+  (it "emit-riscv64-vm-spill-load encodes LD t1,-8(fp)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-spill-load
+                (cl-cc/regalloc:make-vm-spill-load :dst-reg :t1 :slot 1) sink)))
+            :to-equalp #(#x03 #x33 #x84 #xFF))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

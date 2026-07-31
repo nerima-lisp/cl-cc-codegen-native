@@ -4652,3 +4652,25 @@ only owns the accumulation."
             :to-equalp #(#x48 #x89 #xD8       ; MOV RAX, RBX (else)
                          #x48 #x85 #xC9       ; TEST RCX, RCX (cond)
                          #x48 #x0F #x45 #xC2)))) ; CMOVNE RAX, RDX (then)
+
+(describe-sequential "x86-64-emit-ops-bits.lisp: emit-vm-ash"
+  ;; Unlike EMIT-VM-INTEGER-LENGTH, the sign dispatch here is entirely in
+  ;; the EMITTED machine code (JGE/JMP), not in Lisp control flow -- the
+  ;; Lisp function itself has no IF/COND, so one test case fully exercises
+  ;; every line of the emitter (both machine-code paths still get real
+  ;; byte assertions, just within the same single call).
+  (it "emits the fixed 24-byte PUSH/MOV/MOV/TEST/JGE/NEG/SAR/JMP/SAL/POP sequence"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-ash
+                (cl-cc/vm:make-vm-ash :dst :r0 :lhs :r3 :rhs :r2) sink)))
+            :to-equalp #(#x51                  ; PUSH RCX
+                         #x48 #x89 #xD1        ; MOV RCX, RDX (rhs, shift count)
+                         #x48 #x89 #xD8        ; MOV RAX, RBX (lhs)
+                         #x48 #x85 #xC9        ; TEST RCX, RCX
+                         #x7D #x08             ; JGE +8 (skip to SAL when rhs >= 0)
+                         #x48 #xF7 #xD9        ; NEG RCX
+                         #x48 #xD3 #xF8        ; SAR RAX, CL
+                         #xEB #x03             ; JMP +3 (skip SAL)
+                         #x48 #xD3 #xE0        ; SAL RAX, CL
+                         #x59))))              ; POP RCX

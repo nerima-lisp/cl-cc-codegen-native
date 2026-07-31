@@ -5111,3 +5111,54 @@ only owns the accumulation."
       (expect (subseq bytes 6 8) :to-equalp #(#x49 #xBB))        ; mov r11, imm64 (prefix)
       (expect (subseq bytes 16 19) :to-equalp #(#x49 #xFF #xD3)) ; call r11
       (expect (subseq bytes 19 22) :to-equalp #(#x48 #x89 #xC2))))) ; mov rdx, rax
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-div / emit-vm-mod (floor division/modulo)"
+  ;; Bytes derived from the source's own [offset +len] byte-by-byte comment
+  ;; breakdown above EMIT-VM-DIV/EMIT-VM-MOD (x86-64-emit-ops.lisp:473-508).
+  ;; The JE/JNS branches here are branches in the EMITTED machine code, not
+  ;; in this Lisp function -- EMIT-VM-DIV always emits the exact same 34
+  ;; fixed bytes regardless of what LHS/RHS/DST are, so one test per
+  ;; function fully covers this emitter (the runtime correction logic
+  ;; itself is exercised by cl-cc's own VM-level test suite, not here).
+  ;; dst=r2(rdx), lhs=r0(rax), rhs=r1(rcx) throughout.
+  (it "emit-vm-div: MOV+PUSH+PUSH+MOV+CQO+IDIV+TEST+JE+XOR+JNS+DEC+MOV+POP+POP+MOV (34 bytes)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-div
+                (cl-cc/vm:make-vm-div :dst :r2 :lhs :r0 :rhs :r1) sink)))
+            :to-equalp #(#x49 #x89 #xCB      ; mov r11, rcx
+                         #x50                ; push rax
+                         #x52                ; push rdx
+                         #x48 #x89 #xC0      ; mov rax, rax
+                         #x48 #x99           ; cqo
+                         #x49 #xF7 #xFB      ; idiv r11
+                         #x48 #x85 #xD2      ; test rdx, rdx
+                         #x74 #x08           ; je +8
+                         #x49 #x31 #xD3      ; xor r11, rdx
+                         #x79 #x03           ; jns +3
+                         #x48 #xFF #xC8      ; dec rax
+                         #x49 #x89 #xC3      ; mov r11, rax
+                         #x5A                ; pop rdx
+                         #x58                ; pop rax
+                         #x4C #x89 #xDA)))   ; mov rdx, r11
+  (it "emit-vm-mod: MOV+PUSH+PUSH+MOV+CQO+IDIV+TEST+JE+MOV+XOR+JNS+ADD+MOV+POP+POP+MOV (37 bytes)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-mod
+                (cl-cc/vm:make-vm-mod :dst :r2 :lhs :r0 :rhs :r1) sink)))
+            :to-equalp #(#x49 #x89 #xCB      ; mov r11, rcx
+                         #x50                ; push rax
+                         #x52                ; push rdx
+                         #x48 #x89 #xC0      ; mov rax, rax
+                         #x48 #x99           ; cqo
+                         #x49 #xF7 #xFB      ; idiv r11
+                         #x48 #x85 #xD2      ; test rdx, rdx
+                         #x74 #x0B           ; je +11
+                         #x4C #x89 #xD8      ; mov rax, r11
+                         #x48 #x31 #xD0      ; xor rax, rdx
+                         #x79 #x03           ; jns +3
+                         #x4C #x01 #xDA      ; add rdx, r11
+                         #x49 #x89 #xD3      ; mov r11, rdx
+                         #x5A                ; pop rdx
+                         #x58                ; pop rax
+                         #x4C #x89 #xDA))))  ; mov rdx, r11

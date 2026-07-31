@@ -515,6 +515,36 @@ only owns the accumulation."
             :to-equalp #(#x48 #x83 #x8C #x24 #x00 #xF0 #xFF #xFF #x00   ; page 1: [RSP-4096]
                          #x48 #x83 #x8C #x24 #x00 #xE0 #xFF #xFF #x00)))) ; page 2: [RSP-8192]
 
+(describe-sequential "x86-64-emit-ops.lisp: define-checked-binary-alu-emitter family (add/sub/mul-checked)"
+  ;; MOV dst,lhs + ASM-OP dst,rhs + JNO rel32 +2 (skip UD2) + UD2 trap.
+  (it "emit-vm-add-checked: MOV + ADD + JNO +2 + UD2"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-add-checked
+                (cl-cc/vm:make-vm-add-checked :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x48 #x01 #xD0   ; ADD RAX, RDX
+                         #x0F #x81 #x02 #x00 #x00 #x00 ; JNO +2
+                         #x0F #x0B)))     ; UD2
+  (it "emit-vm-sub-checked: MOV + SUB + JNO +2 + UD2"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-sub-checked
+                (cl-cc/vm:make-vm-sub-checked :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x89 #xC8
+                         #x48 #x29 #xD0   ; SUB RAX, RDX
+                         #x0F #x81 #x02 #x00 #x00 #x00
+                         #x0F #x0B)))
+  (it "emit-vm-mul-checked: MOV + IMUL (0F AF, reg=dst rm=src -- opposite operand order from ADD/SUB) + JNO +2 + UD2"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-mul-checked
+                (cl-cc/vm:make-vm-mul-checked :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x89 #xC8
+                         #x48 #x0F #xAF #xC2 ; IMUL RAX, RDX
+                         #x0F #x81 #x02 #x00 #x00 #x00
+                         #x0F #x0B))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

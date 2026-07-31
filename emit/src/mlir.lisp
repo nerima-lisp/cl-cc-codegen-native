@@ -78,14 +78,17 @@ MLIR builtin/func/arith/cf syntax that mlir-opt can parse."
 (defun %mlir-block-ref (block)
   (format nil "^~A" (%mlir-block-label-name block)))
 
+(defparameter *mlir-type-names*
+  (quote ((:fixnum . "i64") (:integer . "i64") (:signed . "i64") (:word . "i64") (:any . "i64")
+          (:character . "i8") (:char . "i8")
+          (:boolean . "i1")
+          (:pointer . "!llvm.ptr") (:ptr . "!llvm.ptr") (:function . "!llvm.ptr") (:values . "!llvm.ptr")
+          (:void . "none")))
+  "MLIR type name for each MIR value-type keyword. Unrecognized keywords
+fall back to \"i64\", matching the widest scalar MIR values default to.")
+
 (defun %mlir-type (type)
-  (case type
-    ((:fixnum :integer :signed :word :any) "i64")
-    ((:character :char) "i8")
-    (:boolean "i1")
-    ((:pointer :ptr :function :values) "!llvm.ptr")
-    (:void "none")
-    (otherwise "i64")))
+  (or (cdr (assoc type *mlir-type-names*)) "i64"))
 
 (defun %mlir-value-type (value)
   (%mlir-type (mirv-type value)))

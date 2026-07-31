@@ -69,14 +69,17 @@
 (defun %llvm-value-name (value)
   (format nil "%reg~D" (mirv-id value)))
 
+(defparameter *llvm-type-names*
+  (quote ((:fixnum . "i64") (:integer . "i64") (:signed . "i64") (:word . "i64") (:any . "i64")
+          (:character . "i8") (:char . "i8")
+          (:boolean . "i1")
+          (:pointer . "ptr") (:ptr . "ptr") (:function . "ptr") (:values . "ptr")
+          (:void . "void")))
+  "LLVM IR type name for each MIR value-type keyword. Unrecognized keywords
+fall back to \"i64\", matching the widest scalar MIR values default to.")
+
 (defun %llvm-type (type)
-  (case type
-    ((:fixnum :integer :signed :word :any) "i64")
-    ((:character :char) "i8")
-    (:boolean "i1")
-    ((:pointer :ptr :function :values) "ptr")
-    (:void "void")
-    (otherwise "i64")))
+  (or (cdr (assoc type *llvm-type-names*)) "i64"))
 
 (defun %llvm-value-type (value)
   (%llvm-type (mirv-type value)))

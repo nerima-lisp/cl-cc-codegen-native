@@ -42,5 +42,5 @@
   (let ((payload (format nil "~{~A~%~}" (mapcar #'wasi-p2-import->wat imports))))
     (if (search "(module" wat)
         (let ((pos (+ (search "(module" wat) (length "(module"))))
-          (concatenate 'string (subseq wat 0 pos) "\n" payload (subseq wat pos)))
-        (concatenate 'string "(module\n" payload wat "\n)"))))
+          (format nil "~A~%~A~A" (subseq wat 0 pos) payload (subseq wat pos)))
+        (format nil "(module~%~A~A~%)" payload wat))))

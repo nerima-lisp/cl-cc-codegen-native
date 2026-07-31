@@ -1,5 +1,13 @@
+;;;; cl-cc-emit.asd — object emission beyond the core native/WASM encoders
+;;;;
+;;;; Alternate and auxiliary emission targets that sit on top of
+;;;; cl-cc-codegen rather than inside it: LLVM IR and MLIR text emission,
+;;;; eBPF object emission, WASM extensions (threads, WASI, source maps, the
+;;;; PC-dispatch trampoline), and BURS instruction selection consumed by the
+;;;; cl-cc monorepo's own test suite rather than by anything in this repo.
+
 (asdf:defsystem :cl-cc-emit
-  :description "Emit backend subsystem: regalloc, codegen"
+  :description "Alternate/auxiliary emission targets: LLVM IR, MLIR, eBPF, WASM extensions"
   :author "takeokunn"
   :license "MIT"
   :homepage "https://github.com/nerima-lisp/cl-cc"
@@ -18,6 +26,5 @@
    (:file "wasm-wasi")
    (:file "ebpf")
    (:file "wasm-threads")
-   (:file "regalloc-advanced-132")
-   (:file "simd-sched-138")
+   (:file "regalloc-advanced")
    (:file "riscv64")))

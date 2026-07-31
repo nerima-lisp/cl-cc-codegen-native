@@ -5199,3 +5199,67 @@ only owns the accumulation."
            (v1 (cl-cc/codegen::%vm-reg-value fn :r0 table))
            (v2 (cl-cc/codegen::%vm-reg-value fn :r1 table)))
       (expect (eq v1 v2) :to-be nil))))
+
+(describe-sequential "isel-core.lisp: %lower-vm-inst-to-mir dispatch"
+  ;; One representative per dispatch branch: a real MIR-lowering constant,
+  ;; a move, one arithmetic op (ADD -- SUB/MUL share the identical shape,
+  ;; differing only in which EQ TYPE-OF branch and MIR op keyword), a
+  ;; no-src/no-dst terminator (JUMP), a one-src terminator (RET), and the
+  ;; default fallback for a VM instruction this dispatcher doesn't know
+  ;; about (PRINT), which must equal %EMIT-PASS-THROUGH-MIR's shape.
+  (it "vm-const lowers to a :const MIR-INST with a MIR-CONST src"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block (cl-cc/vm:make-vm-const :dst :r0 :value 42) reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :const)
+      (expect (cl-cc/mir:mirv-name (cl-cc/mir:miri-dst result)) :to-be :r0)
+      (expect (cl-cc/mir:mirc-value (first (cl-cc/mir:miri-srcs result))) :to-be 42)
+      (expect (cl-cc/mir:mirc-type (first (cl-cc/mir:miri-srcs result))) :to-be :integer)))
+  (it "vm-move lowers to a :move MIR-INST with a MIR-VALUE src"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block (cl-cc/vm:make-vm-move :dst :r0 :src :r1) reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :move)
+      (expect (cl-cc/mir:mirv-name (cl-cc/mir:miri-dst result)) :to-be :r0)
+      (expect (cl-cc/mir:mirv-name (first (cl-cc/mir:miri-srcs result))) :to-be :r1)))
+  (it "vm-add lowers to an :add MIR-INST with two MIR-VALUE srcs"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block (cl-cc/vm:make-vm-add :dst :r2 :lhs :r0 :rhs :r1) reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :add)
+      (expect (cl-cc/mir:mirv-name (cl-cc/mir:miri-dst result)) :to-be :r2)
+      (expect (mapcar (function cl-cc/mir:mirv-name) (cl-cc/mir:miri-srcs result))
+              :to-equal (list :r0 :r1))))
+  (it "vm-jump lowers to a :jump MIR-INST with no dst and no srcs"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (inst (cl-cc/vm:make-vm-jump :label "target"))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir fn block inst reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :jump)
+      (expect (cl-cc/mir:miri-dst result) :to-be nil)
+      (expect (cl-cc/mir:miri-srcs result) :to-be nil)
+      (expect (eq (cl-cc/codegen::%mir-meta-get result :vm-inst) inst) :to-be t)))
+  (it "vm-ret lowers to a :ret MIR-INST with one MIR-VALUE src and no dst"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir
+                    fn block (cl-cc/vm:make-vm-ret :reg :r0) reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :ret)
+      (expect (cl-cc/mir:miri-dst result) :to-be nil)
+      (expect (cl-cc/mir:mirv-name (first (cl-cc/mir:miri-srcs result))) :to-be :r0)))
+  (it "an unhandled VM instruction (e.g. VM-PRINT) falls through to %EMIT-PASS-THROUGH-MIR's :nop shape"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (block (cl-cc/mir:mirf-entry fn))
+           (reg-map (make-hash-table :test (function eql)))
+           (inst (cl-cc/vm:make-vm-print :reg :r0))
+           (result (cl-cc/codegen::%lower-vm-inst-to-mir fn block inst reg-map)))
+      (expect (cl-cc/mir:miri-op result) :to-be :nop)
+      (expect (eq (cl-cc/codegen::%mir-meta-get result :vm-inst) inst) :to-be t))))

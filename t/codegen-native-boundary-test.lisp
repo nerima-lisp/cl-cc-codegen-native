@@ -5162,3 +5162,40 @@ only owns the accumulation."
                          #x5A                ; pop rdx
                          #x58                ; pop rax
                          #x4C #x89 #xDA))))  ; mov rdx, r11
+
+(describe-sequential "isel-core.lisp: %mir-meta-get / %vm-label-name-string / %vm-reg-value"
+  (it "%mir-meta-get returns the value for a present key in a real MIR-INST's meta plist"
+    (expect (cl-cc/codegen::%mir-meta-get
+             (cl-cc/mir:make-mir-inst :meta (list :vm-inst 'x :calling-convention :defer-to-vm))
+             :calling-convention)
+            :to-be :defer-to-vm))
+  (it "%mir-meta-get returns nil for an absent key"
+    (expect (cl-cc/codegen::%mir-meta-get
+             (cl-cc/mir:make-mir-inst :meta (list :vm-inst 'x))
+             :missing-key)
+            :to-be nil))
+  (it "%mir-meta-get returns nil (not an error) when META is non-nil and not a plist"
+    (expect (cl-cc/codegen::%mir-meta-get
+             (cl-cc/mir:make-mir-inst :meta 42)
+             :anything)
+            :to-be nil))
+  (it "%vm-label-name-string returns the label name for a VM-LABEL instruction"
+    (expect (cl-cc/codegen::%vm-label-name-string (cl-cc/vm:make-vm-label :name "loop-start"))
+            :to-equal "loop-start"))
+  (it "%vm-label-name-string returns nil for a non-VM-LABEL instruction"
+    (expect (cl-cc/codegen::%vm-label-name-string (cl-cc/vm:make-vm-move :dst :r0 :src :r1))
+            :to-be nil))
+  (it "%vm-reg-value memoizes: repeated lookups of the same VM register return the same MIR value"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (table (make-hash-table :test (function eql)))
+           (v1 (cl-cc/codegen::%vm-reg-value fn :r0 table))
+           (v2 (cl-cc/codegen::%vm-reg-value fn :r0 table)))
+      (expect (eq v1 v2) :to-be t)
+      (expect (cl-cc/mir:mirv-name v1) :to-be :r0)
+      (expect (cl-cc/mir:mirv-type v1) :to-be :any)))
+  (it "%vm-reg-value creates a distinct MIR value per distinct VM register"
+    (let* ((fn (cl-cc/mir:mir-make-function :test-fn))
+           (table (make-hash-table :test (function eql)))
+           (v1 (cl-cc/codegen::%vm-reg-value fn :r0 table))
+           (v2 (cl-cc/codegen::%vm-reg-value fn :r1 table)))
+      (expect (eq v1 v2) :to-be nil))))

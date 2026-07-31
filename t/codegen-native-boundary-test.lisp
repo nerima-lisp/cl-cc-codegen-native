@@ -583,6 +583,38 @@ only owns the accumulation."
                 sink (list :enabled-p nil :guard-slot 8) t)))
             :to-equalp #())))
 
+(describe-sequential "x86-64-codegen-emitters.lisp: emit-x86-64-function-prologue / -epilogue"
+  ;; Frame-pointer functions use PUSH RBP; MOV RBP,RSP; PUSH (CDR save-regs),
+  ;; and LEAVE;RET on exit. Frame-pointer-omitted functions just PUSH/POP
+  ;; every save-reg directly, ending in a bare RET.
+  (it "prologue (frame-pointer-p): PUSH RBP + MOV RBP,RSP + PUSH the rest of SAVE-REGS"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-function-prologue sink t (list 5 3))))
+            :to-equalp #(#x55           ; PUSH RBP
+                         #x48 #x89 #xE5 ; MOV RBP, RSP
+                         #x53)))        ; PUSH RBX
+  (it "prologue (no frame pointer): PUSH every SAVE-REGS entry directly, incl. REX.B for R12"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-function-prologue sink nil (list 3 12))))
+            :to-equalp #(#x53           ; PUSH RBX
+                         #x41 #x54)))   ; PUSH R12 (REX.B needed for code >= 8)
+  (it "epilogue (frame-pointer-p): POP the non-RBP saves in reverse, then LEAVE + RET"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-function-epilogue sink t (list 5 3))))
+            :to-equalp #(#x5B           ; POP RBX
+                         #xC9           ; LEAVE
+                         #xC3)))        ; RET
+  (it "epilogue (no frame pointer): POP every SAVE-REGS entry in reverse, then bare RET"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-x86-64-function-epilogue sink nil (list 3 12))))
+            :to-equalp #(#x41 #x5C      ; POP R12
+                         #x5B           ; POP RBX
+                         #xC3))))       ; RET
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

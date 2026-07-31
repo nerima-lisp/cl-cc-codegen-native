@@ -160,23 +160,20 @@ emitter clobbers it."
     (emit-a64-instr (encode-cmp rn +a64-zr+) stream)
     (emit-a64-boolean-result rd 0 stream)))
 
-(defun emit-a64-vm-true-pred (inst stream)
-  "Emit dst = 1 for predicates that are always true in integer-only mode.
+(defmacro define-a64-boolean-pred-emit-method (name value)
+  "Define NAME as an AArch64 emitter for a predicate that is
+unconditionally VALUE (0 or 1) in the current fixnum-only integer mode.
 
-FIXNUM-ONLY ASSUMPTION: The AArch64 backend currently operates in fixnum-only
-integer mode. All values are integers, so numberp/integerp are always true and
-consp/symbolp/functionp are always false. When full type-tag support is added,
-these must be reimplemented with actual tag checks."
-  (emit-a64-instr (encode-movz (a64-reg (vm-dst inst)) 1 0) stream))
+FIXNUM-ONLY ASSUMPTION: The AArch64 backend currently operates in
+fixnum-only integer mode. All values are integers, so numberp/integerp
+are always true and consp/symbolp/functionp are always false. When full
+type-tag support is added, these must be reimplemented with actual tag
+checks."
+  `(defun ,name (inst stream)
+     (emit-a64-instr (encode-movz (a64-reg (vm-dst inst)) ,value 0) stream)))
 
-(defun emit-a64-vm-false-pred (inst stream)
-  "Emit dst = 0 for predicates that are always false in integer-only mode.
-
-FIXNUM-ONLY ASSUMPTION: The AArch64 backend currently operates in fixnum-only
-integer mode. All values are integers, so numberp/integerp are always true and
-consp/symbolp/functionp are always false. When full type-tag support is added,
-these must be reimplemented with actual tag checks."
-  (emit-a64-instr (encode-movz (a64-reg (vm-dst inst)) 0 0) stream))
+(define-a64-boolean-pred-emit-method emit-a64-vm-true-pred 1)
+(define-a64-boolean-pred-emit-method emit-a64-vm-false-pred 0)
 
 (defmacro define-a64-cmp-emitter (fn-name cond-code description)
   "Define an AArch64 comparison emitter that materializes a boolean result."
@@ -203,25 +200,25 @@ these must be reimplemented with actual tag checks."
 ;;; BRK #1 traps on overflow.
 ;;; Total: 3 instructions = 12 bytes for add-checked and sub-checked.
 
-(defun emit-a64-vm-add-checked (inst stream)
-  "vm-add-checked: dst = lhs + rhs with hardware overflow trap (FR-303).
-   ADDS sets V on overflow; B.cond VC skips BRK; BRK traps."
-  (let ((rd (a64-reg (vm-dst inst)))
-        (rn (a64-reg (vm-lhs inst)))
-        (rm (a64-reg (vm-rhs inst))))
-    (emit-a64-instr (encode-adds rd rn rm) stream)
-    (emit-a64-instr (encode-b-cond 2 7) stream)     ; B.VC #2 — skip BRK if no overflow
-    (emit-a64-instr (encode-brk 1) stream)))          ; BRK #1 — overflow trap
+(defmacro define-a64-checked-add-sub-emit-method (name encoder overflow-doc)
+  "Define NAME as an AArch64 checked add/sub emitter: ENCODER sets V on
+overflow, B.VC skips a trailing BRK, and the BRK traps when V was set."
+  `(defun ,name (inst stream)
+     ,overflow-doc
+     (let ((rd (a64-reg (vm-dst inst)))
+           (rn (a64-reg (vm-lhs inst)))
+           (rm (a64-reg (vm-rhs inst))))
+       (emit-a64-instr (,encoder rd rn rm) stream)
+       (emit-a64-instr (encode-b-cond 2 7) stream)
+       (emit-a64-instr (encode-brk 1) stream))))          ; BRK #1 — overflow trap
 
-(defun emit-a64-vm-sub-checked (inst stream)
+(define-a64-checked-add-sub-emit-method emit-a64-vm-add-checked encode-adds
+  "vm-add-checked: dst = lhs + rhs with hardware overflow trap (FR-303).
+ADDS sets V on overflow; B.cond VC skips BRK; BRK traps.")
+
+(define-a64-checked-add-sub-emit-method emit-a64-vm-sub-checked encode-subs
   "vm-sub-checked: dst = lhs - rhs with hardware overflow trap (FR-303).
-   SUBS sets V on overflow; B.cond VC skips BRK; BRK traps."
-  (let ((rd (a64-reg (vm-dst inst)))
-        (rn (a64-reg (vm-lhs inst)))
-        (rm (a64-reg (vm-rhs inst))))
-    (emit-a64-instr (encode-subs rd rn rm) stream)
-    (emit-a64-instr (encode-b-cond 2 7) stream)     ; B.VC #2 — skip BRK if no overflow
-    (emit-a64-instr (encode-brk 1) stream)))          ; BRK #1 — overflow trap
+SUBS sets V on overflow; B.cond VC skips BRK; BRK traps.")
 
 (defun emit-a64-vm-mul-checked (inst stream)
   "vm-mul-checked: dst = lhs * rhs with overflow trap (FR-303).

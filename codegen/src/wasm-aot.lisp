@@ -35,11 +35,11 @@ back to the un-processed bytes/WAT exactly as it does on tool failure.")
   (declare (ignore input-file))
   (when (and argv (wasm-tool-available-p (first argv)))
     (handler-case
-        (sb-ext:with-timeout *wasm-tool-timeout-seconds*
-          (uiop:run-program argv :output :string :error-output :string
-                                :ignore-error-status nil))
-      (sb-ext:timeout () nil)
-      (error () nil))))
+        (process-kit:process-result-stdout
+         (process-kit:run/checked (first argv) (rest argv)
+                                  :search t
+                                  :timeout *wasm-tool-timeout-seconds*))
+      (process-kit:process-error () nil))))
 
 (defun %wasm-write-bytes-file (path bytes)
   (ensure-directories-exist path)
@@ -146,15 +146,16 @@ back to the un-processed bytes/WAT exactly as it does on tool failure.")
             (tmp-out (%wasm-temp-path "wasm")))
         (unwind-protect
              (handler-case
-                 (sb-ext:with-timeout *wasm-tool-timeout-seconds*
+                 (progn
                    (%wasm-write-bytes-file tmp-in wasm-bytes)
-                   (uiop:run-program (list "wasm-opt" "-O3" "--strip-debug"
-                                           "--remove-unused-module-elements"
-                                           (namestring tmp-in) "-o" (namestring tmp-out))
-                                     :ignore-error-status nil)
+                   (process-kit:run/checked "wasm-opt"
+                                            (list "-O3" "--strip-debug"
+                                                  "--remove-unused-module-elements"
+                                                  (namestring tmp-in) "-o" (namestring tmp-out))
+                                            :search t
+                                            :timeout *wasm-tool-timeout-seconds*)
                    (if (probe-file tmp-out) (%wasm-read-bytes-file tmp-out) wasm-bytes))
-               (sb-ext:timeout () wasm-bytes)
-               (error () wasm-bytes))
+               (process-kit:process-error () wasm-bytes))
           (ignore-errors (delete-file tmp-in))
           (ignore-errors (delete-file tmp-out))))
       wasm-bytes))
@@ -178,15 +179,16 @@ back to the un-processed bytes/WAT exactly as it does on tool failure.")
             (tmp-wasm (%wasm-temp-path "wasm")))
         (unwind-protect
              (handler-case
-                 (sb-ext:with-timeout *wasm-tool-timeout-seconds*
+                 (progn
                    (with-open-file (out tmp-wat :direction :output :if-exists :supersede
                                                 :if-does-not-exist :create)
                      (write-string wat out))
-                   (uiop:run-program (list "wat2wasm" (namestring tmp-wat) "-o" (namestring tmp-wasm))
-                                     :ignore-error-status nil)
+                   (process-kit:run/checked "wat2wasm"
+                                            (list (namestring tmp-wat) "-o" (namestring tmp-wasm))
+                                            :search t
+                                            :timeout *wasm-tool-timeout-seconds*)
                    (if (probe-file tmp-wasm) (%wasm-read-bytes-file tmp-wasm) fallback-bytes))
-               (sb-ext:timeout () fallback-bytes)
-               (error () fallback-bytes))
+               (process-kit:process-error () fallback-bytes))
           (ignore-errors (delete-file tmp-wat))
           (ignore-errors (delete-file tmp-wasm))))
       fallback-bytes))

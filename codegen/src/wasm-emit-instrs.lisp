@@ -47,41 +47,39 @@
   "Return a direct call expression for LABEL."
   (format nil "(call $~A)" label))
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-add) stream)
-  (let ((reg-map (wasm-target-reg-map target)))
-    (format stream "~%    ~A"
-            (reg-local-set reg-map (vm-dst inst)
-                           (wasm-fixnum-box
-                            (format nil "(i64.add ~A ~A)"
-                                    (wasm-fixnum-unbox reg-map (vm-lhs inst))
-                                    (wasm-fixnum-unbox reg-map (vm-rhs inst))))))))
+(defmacro define-wasm-binary-arith-emit-method (class wasm-op)
+  "Define an EMIT-INSTRUCTION method for CLASS that lowers a two-operand
+fixnum-boxed arithmetic instruction through Wasm's WASM-OP i64 opcode."
+  `(defmethod emit-instruction ((target wasm-target) (inst ,class) stream)
+     (let ((reg-map (wasm-target-reg-map target)))
+       (format stream "~%    ~A"
+               (reg-local-set reg-map (vm-dst inst)
+                              (wasm-fixnum-box
+                               (format nil ,(format nil "(~A ~~A ~~A)" wasm-op)
+                                       (wasm-fixnum-unbox reg-map (vm-lhs inst))
+                                       (wasm-fixnum-unbox reg-map (vm-rhs inst)))))))))
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-integer-add) stream)
-  (emit-instruction target (make-vm-add :dst (vm-dst inst) :lhs (vm-lhs inst) :rhs (vm-rhs inst)) stream))
+(define-wasm-binary-arith-emit-method vm-add "i64.add")
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-sub) stream)
-  (let ((reg-map (wasm-target-reg-map target)))
-    (format stream "~%    ~A"
-            (reg-local-set reg-map (vm-dst inst)
-                           (wasm-fixnum-box
-                            (format nil "(i64.sub ~A ~A)"
-                                    (wasm-fixnum-unbox reg-map (vm-lhs inst))
-                                    (wasm-fixnum-unbox reg-map (vm-rhs inst))))))))
+(define-wasm-binary-arith-emit-method vm-sub "i64.sub")
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-integer-sub) stream)
-  (emit-instruction target (make-vm-sub :dst (vm-dst inst) :lhs (vm-lhs inst) :rhs (vm-rhs inst)) stream))
+(define-wasm-binary-arith-emit-method vm-mul "i64.mul")
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-mul) stream)
-  (let ((reg-map (wasm-target-reg-map target)))
-    (format stream "~%    ~A"
-            (reg-local-set reg-map (vm-dst inst)
-                           (wasm-fixnum-box
-                            (format nil "(i64.mul ~A ~A)"
-                                    (wasm-fixnum-unbox reg-map (vm-lhs inst))
-                                    (wasm-fixnum-unbox reg-map (vm-rhs inst))))))))
+(defmacro define-wasm-binary-arith-alias-emit-method (class constructor)
+  "Define an EMIT-INSTRUCTION method for CLASS that re-dispatches to the
+generic fixnum arithmetic instruction built by CONSTRUCTOR: CL-CC/VM's
+integer-specific opcode and its generic fixnum counterpart lower to
+identical Wasm, so the integer opcode is a pure alias."
+  `(defmethod emit-instruction ((target wasm-target) (inst ,class) stream)
+     (emit-instruction target
+                        (funcall ,constructor :dst (vm-dst inst) :lhs (vm-lhs inst) :rhs (vm-rhs inst))
+                        stream)))
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-integer-mul) stream)
-  (emit-instruction target (make-vm-mul :dst (vm-dst inst) :lhs (vm-lhs inst) :rhs (vm-rhs inst)) stream))
+(define-wasm-binary-arith-alias-emit-method vm-integer-add (function make-vm-add))
+
+(define-wasm-binary-arith-alias-emit-method vm-integer-sub (function make-vm-sub))
+
+(define-wasm-binary-arith-alias-emit-method vm-integer-mul (function make-vm-mul))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-eq) stream)
   "Emit CL EQ/EQL using ref.eq for GC references and numeric equality for known i31 refs."
@@ -757,21 +755,24 @@ emission structurally aware without changing the VM instruction definition."
   (error "Unsupported WASM instruction: ~A" (type-of instruction)))
 
 (defun %wasm-reject-float-arithmetic (inst)
+  "Fail closed: Wasm float arithmetic lowering does not exist, so signal
+rather than silently emitting wrong integer semantics for INST."
   (error "Wasm float arithmetic lowering is not implemented for ~S"
          (type-of inst)))
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-float-add) stream)
-  (declare (ignore target stream))
-  (%wasm-reject-float-arithmetic inst))
+(defmacro define-wasm-unsupported-float-arith-emit-method (class)
+  "Define an EMIT-INSTRUCTION method for CLASS that fails closed via
+%WASM-REJECT-FLOAT-ARITHMETIC. Wasm float arithmetic lowering is not
+implemented, so every float arithmetic opcode signals rather than silently
+emitting wrong integer semantics."
+  `(defmethod emit-instruction ((target wasm-target) (inst ,class) stream)
+     (declare (ignore target stream))
+     (%wasm-reject-float-arithmetic inst)))
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-float-sub) stream)
-  (declare (ignore target stream))
-  (%wasm-reject-float-arithmetic inst))
+(define-wasm-unsupported-float-arith-emit-method vm-float-add)
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-float-mul) stream)
-  (declare (ignore target stream))
-  (%wasm-reject-float-arithmetic inst))
+(define-wasm-unsupported-float-arith-emit-method vm-float-sub)
 
-(defmethod emit-instruction ((target wasm-target) (inst vm-float-div) stream)
-  (declare (ignore target stream))
-  (%wasm-reject-float-arithmetic inst))
+(define-wasm-unsupported-float-arith-emit-method vm-float-mul)
+
+(define-wasm-unsupported-float-arith-emit-method vm-float-div)

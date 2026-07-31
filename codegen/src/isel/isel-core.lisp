@@ -34,7 +34,24 @@
   "Return registered instruction-selection rules for TARGET."
   (copy-list (gethash target *isel-rule-table*)))
 
+(defmacro define-isel-rules (var-name target &body rule-specs)
+  "Register maximal-munch RULE-SPECS for TARGET and bind VAR-NAME to the
+list of created ISEL-RULE structs (mirroring REGISTER-ISEL-RULE's own
+return value, so this is a pure notational collapse — every rule that was
+registered before is registered exactly the same way now).
+
+Each element of RULE-SPECS is (NAME PATTERN RESULT-OP COST SIZE)."
+  `(defparameter ,var-name
+     (list ,@(loop for (name pattern result-op cost size) in rule-specs
+                   collect `(register-isel-rule
+                             (make-isel-rule :name ,name :target ,target
+                                             :pattern ',pattern :result-op ,result-op
+                                             :cost ,cost :size ,size))))))
+
 (defun %isel-variable-pattern-p (pattern)
+  "Return T when PATTERN is an isel pattern variable, by convention any
+symbol whose name starts with #\\?  (e.g. ?LHS binds whatever subtree
+occupies that position, the way DEFINE-ISEL-RULES patterns use it)."
   (and (symbolp pattern)
        (plusp (length (symbol-name pattern)))
        (char= (char (symbol-name pattern) 0) #\?)))
@@ -43,7 +60,11 @@
   (if (consp tree) (first tree) tree))
 
 (defun %isel-tree-children (tree)
-  (if (and (consp tree) (not (member (first tree) '(:reg :const :literal) :test #'eq)))
+  "Return TREE's child subtrees, or NIL when TREE is a leaf.
+:REG/:CONST/:LITERAL heads mark leaves even though they are themselves
+conses (e.g. (:reg R3)) -- their \"arguments\" are operand data, not
+further pattern-matchable subtrees."
+  (if (and (consp tree) (not (member (first tree) (quote (:reg :const :literal)) :test (function eq))))
       (rest tree)
       nil))
 
@@ -118,6 +139,10 @@ the MIR pipeline and is also intentionally small enough for direct unit tests."
     (t :any)))
 
 (defun %emit-pass-through-mir (block vm-inst)
+  "Emit a :NOP MIR node carrying VM-INST verbatim in its metadata.
+Used for VM instructions %LOWER-VM-INST-TO-MIR has no real MIR lowering
+for, so they round-trip through the MIR pipeline unchanged instead of
+being silently dropped or erroring."
   (mir-emit block :nop :meta (list :vm-inst vm-inst)))
 
 (defun %lower-vm-inst-to-mir (fn block inst reg-map)
@@ -233,6 +258,10 @@ round-trip safely through the MIR path."
     (t (values nil nil))))
 
 (defun %mir-constant-fold-value (op srcs constants)
+  "Return the folded integer result of OP on SRCS when both operands are
+proven-constant integers in CONSTANTS, else NIL. Deliberately conservative:
+non-integer constants, and anything not yet proven constant, are left
+alone rather than folded, since this pass only tracks integer arithmetic."
   (when (= (length srcs) 2)
     (multiple-value-bind (a ap) (%operand-constant-value (first srcs) constants)
       (multiple-value-bind (b bp) (%operand-constant-value (second srcs) constants)
@@ -278,11 +307,18 @@ metadata-preserved pass-through nodes."
                              (setf (gethash key cse) dst))))))))))))))
 
 (defun %mir-operand-tree (operand)
+  "Return OPERAND as an isel-matchable pattern tree: (:const value) for a
+literal, (:reg name) for a value with no foldable defining instruction, or
+-- mutually recursive with %MIR-INST-TREE -- the defining instruction's
+own tree when OPERAND is defined by one of a small set of
+foldable-into-a-tile ops. This is what lets ISEL-MAXIMAL-MUNCH match
+multi-instruction tiles (like an add feeding a mul) instead of one MIR
+instruction at a time."
   (cond
     ((mir-const-p operand) (list :const (mirc-value operand)))
     ((mir-value-p operand)
      (let ((def (mirv-def-inst operand)))
-       (if (and def (member (miri-op def) '(:const :add :sub :mul :move :load) :test #'eq))
+       (if (and def (member (miri-op def) (quote (:const :add :sub :mul :move :load)) :test (function eq)))
            (%mir-inst-tree def)
            (list :reg (mirv-name operand)))))
     (t (list :literal operand))))

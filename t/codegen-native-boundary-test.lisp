@@ -5310,3 +5310,59 @@ only owns the accumulation."
       (expect (cl-cc/mir:miri-dst result) :to-be nil)
       (expect (cl-cc/mir:mirv-name (first (cl-cc/mir:miri-srcs result))) :to-be :r0)
       (expect (cl-cc/codegen::%mir-meta-get result :toplevel-halt-p) :to-be t))))
+
+(describe-sequential "isel-core.lisp: %operand-constant-value / %mir-constant-fold-value"
+  (it "%operand-constant-value returns (value T) for a MIR-CONST operand"
+    (expect (multiple-value-list
+             (cl-cc/codegen::%operand-constant-value
+              (cl-cc/mir:make-mir-const :value 5) (make-hash-table)))
+            :to-equal (list 5 t)))
+  (it "%operand-constant-value returns (value T) for a MIR-VALUE proven constant in CONSTANTS"
+    (let* ((v (cl-cc/mir:make-mir-value :id 0))
+           (constants (make-hash-table :test (function eq))))
+      (setf (gethash v constants) (cons t 42))
+      (expect (multiple-value-list (cl-cc/codegen::%operand-constant-value v constants))
+              :to-equal (list 42 t))))
+  (it "%operand-constant-value returns (nil NIL) for a MIR-VALUE not yet proven constant"
+    (expect (multiple-value-list
+             (cl-cc/codegen::%operand-constant-value
+              (cl-cc/mir:make-mir-value :id 0) (make-hash-table :test (function eq))))
+            :to-equal (list nil nil)))
+  (it "%operand-constant-value returns (nil NIL) for a non-MIR operand"
+    (expect (multiple-value-list
+             (cl-cc/codegen::%operand-constant-value 42 (make-hash-table)))
+            :to-equal (list nil nil)))
+  (it "%mir-constant-fold-value folds :add/:sub/:mul when both srcs are proven-constant integers"
+    (let ((constants (make-hash-table)))
+      (expect (cl-cc/codegen::%mir-constant-fold-value
+               :add (list (cl-cc/mir:make-mir-const :value 3)
+                          (cl-cc/mir:make-mir-const :value 4))
+               constants)
+              :to-be 7)
+      (expect (cl-cc/codegen::%mir-constant-fold-value
+               :sub (list (cl-cc/mir:make-mir-const :value 10)
+                          (cl-cc/mir:make-mir-const :value 3))
+               constants)
+              :to-be 7)
+      (expect (cl-cc/codegen::%mir-constant-fold-value
+               :mul (list (cl-cc/mir:make-mir-const :value 3)
+                          (cl-cc/mir:make-mir-const :value 4))
+               constants)
+              :to-be 12)))
+  (it "%mir-constant-fold-value returns nil for an unsupported op even with constant integer srcs"
+    (expect (cl-cc/codegen::%mir-constant-fold-value
+             :div (list (cl-cc/mir:make-mir-const :value 10)
+                        (cl-cc/mir:make-mir-const :value 2))
+             (make-hash-table))
+            :to-be nil))
+  (it "%mir-constant-fold-value returns nil for a non-integer constant (conservative, no string/etc folding)"
+    (expect (cl-cc/codegen::%mir-constant-fold-value
+             :add (list (cl-cc/mir:make-mir-const :value "a")
+                        (cl-cc/mir:make-mir-const :value 2))
+             (make-hash-table))
+            :to-be nil))
+  (it "%mir-constant-fold-value returns nil when SRCS isn't exactly 2 operands"
+    (expect (cl-cc/codegen::%mir-constant-fold-value
+             :add (list (cl-cc/mir:make-mir-const :value 3))
+             (make-hash-table))
+            :to-be nil)))

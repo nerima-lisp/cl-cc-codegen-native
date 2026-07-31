@@ -4721,3 +4721,18 @@ only owns the accumulation."
                (cl-cc/codegen::emit-vm-const
                 (cl-cc/vm:make-vm-const :dst :r0 :value nil) sink)))
             :to-equalp #(#x48 #xB8 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00))))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-const (float branch)"
+  ;; MOV R11,<IEEE754 bits> + MOVQ xmm0,R11. The expected bit pattern for
+  ;; 2.5d0 (0x4004000000000000) was computed independently via Python's
+  ;; struct module (the standard IEEE754 double encoding), not by
+  ;; re-deriving X86-64-DOUBLE-FLOAT-BITS's own INTEGER-DECODE-FLOAT-based
+  ;; algorithm -- differential verification against a second, independent
+  ;; source rather than checking the function's logic against itself.
+  (it "emits MOV R11,imm64 (IEEE754 bits) + MOVQ xmm0,R11 for a double-float value"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-const
+                (cl-cc/vm:make-vm-const :dst :r0 :value 2.5d0) sink)))
+            :to-equalp #(#x49 #xBB #x00 #x00 #x00 #x00 #x00 #x00 #x04 #x40 ; MOV R11, #x4004000000000000
+                         #x66 #x49 #x0F #x6E #xC3))))                      ; MOVQ XMM0, R11

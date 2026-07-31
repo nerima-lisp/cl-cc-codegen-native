@@ -4735,4 +4735,31 @@ only owns the accumulation."
                (cl-cc/codegen::emit-vm-const
                 (cl-cc/vm:make-vm-const :dst :r0 :value 2.5d0) sink)))
             :to-equalp #(#x49 #xBB #x00 #x00 #x00 #x00 #x00 #x00 #x04 #x40 ; MOV R11, #x4004000000000000
-                         #x66 #x49 #x0F #x6E #xC3))))                      ; MOVQ XMM0, R11
+                         #x66 #x49 #x0F #x6E #xC3)))                      ; MOVQ XMM0, R11
+  ;; The remaining 3 of X86-64-DOUBLE-FLOAT-BITS's 4 COND branches
+  ;; (zero/infinity; NaN deferred -- portably constructing a NaN risks
+  ;; tripping SBCL's default floating-point INVALID trap before the
+  ;; function under test even runs). Each expected bit pattern again
+  ;; cross-checked via Python's struct.pack, not hand-derived.
+  (it "encodes positive zero as bit pattern 0"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-const
+                (cl-cc/vm:make-vm-const :dst :r0 :value 0.0d0) sink)))
+            :to-equalp #(#x49 #xBB #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00
+                         #x66 #x49 #x0F #x6E #xC3)))
+  (it "encodes negative zero with the sign bit set (0x8000000000000000)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-const
+                (cl-cc/vm:make-vm-const :dst :r0 :value -0.0d0) sink)))
+            :to-equalp #(#x49 #xBB #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x80
+                         #x66 #x49 #x0F #x6E #xC3)))
+  (it "encodes positive infinity (exponent all-1s, zero mantissa: 0x7FF0000000000000)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-const
+                (cl-cc/vm:make-vm-const :dst :r0 :value sb-ext:double-float-positive-infinity)
+                sink)))
+            :to-equalp #(#x49 #xBB #x00 #x00 #x00 #x00 #x00 #x00 #xF0 #x7F
+                         #x66 #x49 #x0F #x6E #xC3))))

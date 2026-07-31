@@ -4930,3 +4930,61 @@ only owns the accumulation."
                          #xC5 #xFD #xFE #xC1        ; vpaddd ymm0,ymm0,ymm1  (2-byte VEX)
                          #x4C #x8D #x5C #x98 #x08   ; lea r11, [rax+rbx*4+8]  (dst)
                          #xC4 #xC1 #x06 #x7F #x03))))  ; vmovdqu [r11], ymm0  (3-byte VEX)
+
+(describe-sequential
+  "x86-64-emit-ops.lisp: emit-vm-float-sub / emit-vm-float-mul / emit-vm-float-div / emit-vm-sqrt"
+  ;; Same MOVSS/MOVSD-then-op shape as the already-tested emit-vm-float-add
+  ;; (see "native float precision lowering" above); only the opcode byte
+  ;; differs. VM-FLOAT-{SUB,MUL,DIV} all default :precision to :f64, so
+  ;; NIL exercises the same branch as an explicit :f64 would.
+  (it-each ((:f32 #(243 15 16 208 243 15 92 209))
+            (nil  #(242 15 16 208 242 15 92 209)))
+      "selects x86 scalar float-sub ~A encoding"
+      (precision expected)
+    (expect
+      (%collect-emitted-octets
+        (lambda (sink)
+          (cl-cc/codegen::emit-vm-float-sub
+            (apply (function cl-cc/vm:make-vm-float-sub)
+                   :dst :r2 :lhs :r0 :rhs :r1
+                   (when precision (list :precision precision)))
+            sink)))
+      :to-equalp
+      expected))
+  (it-each ((:f32 #(243 15 16 208 243 15 89 209))
+            (nil  #(242 15 16 208 242 15 89 209)))
+      "selects x86 scalar float-mul ~A encoding"
+      (precision expected)
+    (expect
+      (%collect-emitted-octets
+        (lambda (sink)
+          (cl-cc/codegen::emit-vm-float-mul
+            (apply (function cl-cc/vm:make-vm-float-mul)
+                   :dst :r2 :lhs :r0 :rhs :r1
+                   (when precision (list :precision precision)))
+            sink)))
+      :to-equalp
+      expected))
+  (it-each ((:f32 #(243 15 16 208 243 15 94 209))
+            (nil  #(242 15 16 208 242 15 94 209)))
+      "selects x86 scalar float-div ~A encoding"
+      (precision expected)
+    (expect
+      (%collect-emitted-octets
+        (lambda (sink)
+          (cl-cc/codegen::emit-vm-float-div
+            (apply (function cl-cc/vm:make-vm-float-div)
+                   :dst :r2 :lhs :r0 :rhs :r1
+                   (when precision (list :precision precision)))
+            sink)))
+      :to-equalp
+      expected))
+  (it "emit-vm-sqrt always uses MOVSD+SQRTSD (VM-SQRT has no precision slot, unlike the binary float ops)"
+    (expect
+      (%collect-emitted-octets
+        (lambda (sink)
+          (cl-cc/codegen::emit-vm-sqrt
+            (cl-cc/vm:make-vm-sqrt :dst :r2 :src :r0)
+            sink)))
+      :to-equalp
+      #(242 15 16 208 242 15 81 210))))

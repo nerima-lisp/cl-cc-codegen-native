@@ -3970,3 +3970,16 @@ only owns the accumulation."
     (expect (cl-cc/codegen::wasm-array-default-wat :float) :to-equal "(f64.const 0.0)")
     (expect (cl-cc/codegen::wasm-array-default-wat :char) :to-equal "(i32.const 0)")
     (expect (cl-cc/codegen::wasm-array-default-wat :eqref) :to-equal "(ref.null eq)")))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-add (define-binary-alu-emitter over MOV + ADD)"
+  ;; *CURRENT-REGALLOC* defaults to NIL, so VM-REG-TO-X86 falls back to the
+  ;; naive *VM-REG-MAP* (:R0->RAX=0, :R1->RCX=1, :R2->RDX=2). The macro
+  ;; emits MOV dst,lhs (0x89 /r) then ADD dst,rhs (0x01 /r), each with its
+  ;; own REX.W prefix computed from that specific instruction's operands.
+  (it "emits MOV RAX,RCX (48 89 C8) then ADD RAX,RDX (48 01 D0) for dst=R0,lhs=R1,rhs=R2"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-add
+                (cl-cc/vm:make-vm-add :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
+                         #x48 #x01 #xD0)))) ; ADD RAX, RDX

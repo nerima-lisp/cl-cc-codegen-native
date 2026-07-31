@@ -3790,3 +3790,69 @@ only owns the accumulation."
          (cl-cc/codegen::emit-a64-vm-prefetch
           (cl-cc/vm:make-vm-prefetch :base-reg :r1 :offset 3 :locality :t0)
           sink))))))
+
+(describe-sequential "aarch64-emitters.lisp: boolean-pred and comparison emitter families"
+  ;; DEFINE-A64-BOOLEAN-PRED-EMIT-METHOD generates unconditional-result
+  ;; predicates (fixnum-only mode: numberp/integerp always true,
+  ;; consp/symbolp/functionp always false) dispatched via a per-VM-tag
+  ;; hash table in aarch64-program.lisp, not tied 1:1 to a single VM
+  ;; struct type -- VM-NUMBER-P/VM-CONS-P are two of several dispatched to
+  ;; the same emitter.
+  (it "emit-a64-vm-true-pred always emits MOVZ Xd,#1 regardless of the VM tag (VM-NUMBER-P here)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-true-pred
+                (cl-cc/vm:make-vm-number-p :dst :r1 :src :r2) sink)))
+            :to-equalp #(#x21 #x00 #x80 #xD2)))
+  (it "emit-a64-vm-false-pred always emits MOVZ Xd,#0 regardless of the VM tag (VM-CONS-P here)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-false-pred
+                (cl-cc/vm:make-vm-cons-p :dst :r1 :src :r2) sink)))
+            :to-equalp #(#x01 #x00 #x80 #xD2)))
+  (it "emit-a64-vm-null-p encodes CMP Xsrc,XZR + the MOVZ/MOVZ/CSEL boolean-result idiom (cond=EQ=0)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-null-p
+                (cl-cc/vm:make-vm-null-p :dst :r1 :src :r2) sink)))
+            :to-equalp #(#x5F #x00 #x1F #xEB   ; CMP X2, XZR
+                         #x01 #x00 #x80 #xD2   ; MOVZ X1, #0
+                         #x30 #x00 #x80 #xD2   ; MOVZ X16, #1
+                         #x01 #x02 #x81 #x9A))) ; CSEL X1, X16, X1, EQ
+  (it "emit-a64-vm-lt encodes CMP Xlhs,Xrhs + boolean-result idiom at cond=LT(11)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-lt
+                (cl-cc/vm:make-vm-lt :dst :r1 :lhs :r2 :rhs :r3) sink)))
+            :to-equalp #(#x5F #x00 #x03 #xEB   ; CMP X2, X3
+                         #x01 #x00 #x80 #xD2   ; MOVZ X1, #0
+                         #x30 #x00 #x80 #xD2   ; MOVZ X16, #1
+                         #x01 #xB2 #x81 #x9A))) ; CSEL X1, X16, X1, LT
+  (it "emit-a64-vm-eq encodes CMP Xlhs,Xrhs + boolean-result idiom at cond=EQ(0)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-eq
+                (cl-cc/vm:make-vm-eq :dst :r1 :lhs :r2 :rhs :r3) sink)))
+            :to-equalp #(#x5F #x00 #x03 #xEB   ; CMP X2, X3
+                         #x01 #x00 #x80 #xD2   ; MOVZ X1, #0
+                         #x30 #x00 #x80 #xD2   ; MOVZ X16, #1
+                         #x01 #x02 #x81 #x9A)))) ; CSEL X1, X16, X1, EQ
+
+(describe-sequential "aarch64-emitters.lisp: emit-a64-vm-add-checked / emit-a64-vm-sub-checked"
+  ;; ADDS/SUBS + B.VC(cond=7) skip-2 + BRK #1 overflow-trap idiom.
+  (it "emit-a64-vm-add-checked encodes ADDS + B.VC #2 + BRK #1"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-add-checked
+                (cl-cc/vm:make-vm-add-checked :dst :r1 :lhs :r2 :rhs :r3) sink)))
+            :to-equalp #(#x41 #x00 #x03 #xAB   ; ADDS X1, X2, X3
+                         #x47 #x00 #x00 #x54   ; B.VC #2
+                         #x20 #x00 #x20 #xD4))) ; BRK #1
+  (it "emit-a64-vm-sub-checked encodes SUBS + B.VC #2 + BRK #1"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-sub-checked
+                (cl-cc/vm:make-vm-sub-checked :dst :r1 :lhs :r2 :rhs :r3) sink)))
+            :to-equalp #(#x41 #x00 #x03 #xEB   ; SUBS X1, X2, X3
+                         #x47 #x00 #x00 #x54   ; B.VC #2
+                         #x20 #x00 #x20 #xD4)))) ; BRK #1

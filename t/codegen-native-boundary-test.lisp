@@ -3983,3 +3983,34 @@ only owns the accumulation."
                 (cl-cc/vm:make-vm-add :dst :r0 :lhs :r1 :rhs :r2) sink)))
             :to-equalp #(#x48 #x89 #xC8   ; MOV RAX, RCX
                          #x48 #x01 #xD0)))) ; ADD RAX, RDX
+
+(describe-sequential "x86-64-emit-ops-logical.lisp: emit-vm-and / emit-vm-or (short-circuit boolean logic)"
+  ;; 98%-similar per `paredit inspect similarity` -- both share the exact
+  ;; XOR/TEST/TEST/ADD skeleton and differ only in the first short-circuit
+  ;; jump's condition byte (JE=0x74 for AND vs JNE=0x75 for OR) and its
+  ;; displacement. Locking in the current byte-for-byte output here BEFORE
+  ;; consolidating both into a shared defmacro, so the refactor is
+  ;; regression-checked against this exact fixture rather than assumed
+  ;; equivalent by inspection.
+  (it "emit-vm-and encodes XOR dst,dst + TEST lhs,lhs + JE +9 + TEST rhs,rhs + JE +4 + ADD dst,1"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-and
+                (cl-cc/vm:make-vm-and :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x31 #xC0   ; XOR RAX, RAX
+                         #x48 #x85 #xC9   ; TEST RCX, RCX
+                         #x74 #x09        ; JE +9
+                         #x48 #x85 #xD2   ; TEST RDX, RDX
+                         #x74 #x04        ; JE +4
+                         #x48 #x83 #xC0 #x01))) ; ADD RAX, 1
+  (it "emit-vm-or encodes the same skeleton but JNE +5 for its first short-circuit jump"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-or
+                (cl-cc/vm:make-vm-or :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x31 #xC0   ; XOR RAX, RAX
+                         #x48 #x85 #xC9   ; TEST RCX, RCX
+                         #x75 #x05        ; JNE +5
+                         #x48 #x85 #xD2   ; TEST RDX, RDX
+                         #x74 #x04        ; JE +4
+                         #x48 #x83 #xC0 #x01)))) ; ADD RAX, 1

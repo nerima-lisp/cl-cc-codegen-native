@@ -48,6 +48,24 @@
        (emit-setcc ,setcc-opcode dst stream)
        (emit-movzx-r64-r8 dst dst stream))))
 
+(defmacro define-short-circuit-logical-emitter (fn-name short-circuit-jcc short-circuit-offset description)
+  "Define a short-circuiting AND/OR-style boolean emitter: XOR dst,dst;
+TEST lhs,lhs; SHORT-CIRCUIT-JCC #SHORT-CIRCUIT-OFFSET; TEST rhs,rhs; JE +4;
+ADD dst,1. SHORT-CIRCUIT-JCC/SHORT-CIRCUIT-OFFSET are the only bytes that
+differ between AND (JE, short-circuits when LHS is zero) and OR (JNE,
+short-circuits when LHS is nonzero)."
+  `(defun ,fn-name (inst stream)
+     ,description
+     (let ((dst (vm-reg-to-x86 (vm-dst inst)))
+           (lhs (vm-reg-to-x86 (vm-lhs inst)))
+           (rhs (vm-reg-to-x86 (vm-rhs inst))))
+       (emit-xor-rr64 dst dst stream)
+       (emit-test-rr64 lhs lhs stream)
+       (emit-byte ,short-circuit-jcc stream) (emit-byte ,short-circuit-offset stream)
+       (emit-test-rr64 rhs rhs stream)
+       (emit-byte #x74 stream) (emit-byte 4 stream)
+       (emit-add-ri8 dst 1 stream))))
+
 (defmacro define-unary-mov-emitter (fn-name asm-op description)
   "Define a unary emitter: MOV dst←src, then ASM-OP dst."
   `(defun ,fn-name (inst stream)

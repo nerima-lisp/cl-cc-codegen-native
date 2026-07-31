@@ -56,29 +56,9 @@
 ;;;   [13 +4] ADD  dst, 1      -- at least one nonzero: dst = 1
 ;;;   [17] done
 
-(defun emit-vm-and (inst stream)
-  "vm-and: dst = (lhs && rhs) ? 1 : 0  (logical AND, integer-only mode)."
-  (let ((dst (vm-reg-to-x86 (vm-dst inst)))
-        (lhs (vm-reg-to-x86 (vm-lhs inst)))
-        (rhs (vm-reg-to-x86 (vm-rhs inst))))
-    (emit-xor-rr64 dst dst stream)                           ; [0  +3] dst = 0
-    (emit-test-rr64 lhs lhs stream)                          ; [3  +3]
-    (emit-byte #x74 stream) (emit-byte 9 stream)             ; [6  +2] JE +9 -> [17]
-    (emit-test-rr64 rhs rhs stream)                          ; [8  +3]
-    (emit-byte #x74 stream) (emit-byte 4 stream)             ; [11 +2] JE +4 -> [17]
-    (emit-add-ri8 dst 1 stream)))                            ; [13 +4] dst = 1
+(define-short-circuit-logical-emitter emit-vm-and #x74 9 "vm-and: dst = (lhs && rhs) ? 1 : 0  (logical AND, integer-only mode).")
 
-(defun emit-vm-or (inst stream)
-  "vm-or: dst = (lhs || rhs) ? 1 : 0  (logical OR, integer-only mode)."
-  (let ((dst (vm-reg-to-x86 (vm-dst inst)))
-        (lhs (vm-reg-to-x86 (vm-lhs inst)))
-        (rhs (vm-reg-to-x86 (vm-rhs inst))))
-    (emit-xor-rr64 dst dst stream)                           ; [0  +3] dst = 0
-    (emit-test-rr64 lhs lhs stream)                          ; [3  +3]
-    (emit-byte #x75 stream) (emit-byte 5 stream)             ; [6  +2] JNE +5 -> [13]
-    (emit-test-rr64 rhs rhs stream)                          ; [8  +3]
-    (emit-byte #x74 stream) (emit-byte 4 stream)             ; [11 +2] JE +4 -> [17]
-    (emit-add-ri8 dst 1 stream)))                            ; [13 +4] dst = 1
+(define-short-circuit-logical-emitter emit-vm-or #x75 5 "vm-or: dst = (lhs || rhs) ? 1 : 0  (logical OR, integer-only mode).")
 
 ;;; Binary logical instruction emitters
 

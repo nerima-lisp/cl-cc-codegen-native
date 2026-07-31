@@ -615,6 +615,30 @@ only owns the accumulation."
                          #x5B           ; POP RBX
                          #xC3))))       ; RET
 
+(describe-sequential "x86-64-codegen-emitters.lisp: %native-inst-touches-phys-p / %native-inst-reads-phys-p"
+  ;; VM-MOVE defines its DST and uses its SRC (regalloc-defs-uses.lisp).
+  ;; TOUCHES-PHYS-P checks defs OR uses; READS-PHYS-P checks uses only --
+  ;; so a phys-key matching only the DST register must differ between them.
+  (let ((inst (cl-cc/vm:make-vm-move :dst :r0 :src :r1))
+        (assignment (make-hash-table :test 'eq)))
+    (setf (gethash :r0 assignment) :phys-a
+          (gethash :r1 assignment) :phys-b)
+    (it "touches-phys-p is T for the DST's phys assignment (via defs), reads-phys-p is NIL for it (defs aren't uses)"
+      (expect (and (cl-cc/codegen::%native-inst-touches-phys-p inst :phys-a assignment) t)
+              :to-be t)
+      (expect (cl-cc/codegen::%native-inst-reads-phys-p inst :phys-a assignment)
+              :to-be nil))
+    (it "both are T for the SRC's phys assignment (a genuine use)"
+      (expect (and (cl-cc/codegen::%native-inst-touches-phys-p inst :phys-b assignment) t)
+              :to-be t)
+      (expect (and (cl-cc/codegen::%native-inst-reads-phys-p inst :phys-b assignment) t)
+              :to-be t))
+    (it "both are NIL for a phys-key neither register is assigned to"
+      (expect (cl-cc/codegen::%native-inst-touches-phys-p inst :phys-unrelated assignment)
+              :to-be nil)
+      (expect (cl-cc/codegen::%native-inst-reads-phys-p inst :phys-unrelated assignment)
+              :to-be nil))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

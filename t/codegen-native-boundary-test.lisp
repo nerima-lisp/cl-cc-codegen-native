@@ -5390,3 +5390,34 @@ only owns the accumulation."
       (expect (cl-cc/mir:mirb-succs entry-block) :to-equal (list loop-block))
       (expect (mapcar (function cl-cc/mir:miri-op) (cl-cc/mir:mirb-insts loop-block))
               :to-equal (list :nop :const :ret)))))
+
+(describe-sequential "isel-core.lisp: %mir-dst-name"
+  (it "returns the VM register name for an instruction with a dst"
+    (expect (cl-cc/codegen::%mir-dst-name
+             (cl-cc/mir:make-mir-inst :dst (cl-cc/mir:make-mir-value :name :r0)))
+            :to-be :r0))
+  (it "returns nil for a terminator instruction with no dst"
+    (expect (cl-cc/codegen::%mir-dst-name (cl-cc/mir:make-mir-inst :dst nil))
+            :to-be nil)))
+
+(describe-sequential "isel-core.lisp: optimize-mir-module-for-isel (constant folding + CSE)"
+  (it "folds a constant + constant add into :const, and CSE-rewrites a repeated non-constant add into :move"
+    ;; r0=3, r1=4, r2=r0+r1 (both const -> folds to (:const 7)),
+    ;; r3=r6+r7, r4=r6+r7 (r6/r7 opaque, same expr repeated -> r4 becomes
+    ;; (:move r3), CSE keys on structurally-identical (op . src-ids)).
+    (let* ((program (cl-cc/vm:make-vm-program
+                      :instructions
+                      (list (cl-cc/vm:make-vm-const :dst :r0 :value 3)
+                            (cl-cc/vm:make-vm-const :dst :r1 :value 4)
+                            (cl-cc/vm:make-vm-add :dst :r2 :lhs :r0 :rhs :r1)
+                            (cl-cc/vm:make-vm-add :dst :r3 :lhs :r6 :rhs :r7)
+                            (cl-cc/vm:make-vm-add :dst :r4 :lhs :r6 :rhs :r7))))
+           (module (cl-cc/codegen::vm-program->mir-module program)))
+      (cl-cc/codegen::optimize-mir-module-for-isel module)
+      (let* ((fn (first (cl-cc/mir:mirm-functions module)))
+             (insts (cl-cc/mir:mirb-insts (cl-cc/mir:mirf-entry fn))))
+        (expect (mapcar (function cl-cc/mir:miri-op) insts)
+                :to-equal (list :const :const :const :add :move))
+        (expect (cl-cc/mir:mirc-value (first (cl-cc/mir:miri-srcs (third insts)))) :to-be 7)
+        (expect (cl-cc/mir:mirv-name (cl-cc/mir:miri-dst (fifth insts))) :to-be :r4)
+        (expect (cl-cc/mir:mirv-name (first (cl-cc/mir:miri-srcs (fifth insts)))) :to-be :r3)))))

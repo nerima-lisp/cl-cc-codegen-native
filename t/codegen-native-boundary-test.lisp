@@ -4084,3 +4084,26 @@ only owns the accumulation."
                          #x5A
                          #x58
                          #x4C #x89 #xD8))))
+
+(describe-sequential "x86-64-emit-ops.lisp: define-cmp-emitter family (emit-vm-lt / emit-vm-eq)"
+  ;; CMP lhs,rhs -> SETcc dst8 -> MOVZX dst64,dst8. EMIT-SETCC only emits a
+  ;; REX prefix when its register code is >= 4 (SETcc needs REX to reach
+  ;; SPL/BPL/SIL/DIL's low byte without the legacy AH/CH/DH/BH aliasing) --
+  ;; covering both a dst < 4 (no REX on SETcc) and dst >= 4 (REX.B=0 on
+  ;; SETcc) case.
+  (it "emit-vm-lt (dst=RAX, code<4): CMP + SETL AL (no REX) + MOVZX RAX,AL"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-lt
+                (cl-cc/vm:make-vm-lt :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x39 #xD1   ; CMP RCX, RDX
+                         #x0F #x9C #xC0   ; SETL AL
+                         #x48 #x0F #xB6 #xC0))) ; MOVZX RAX, AL
+  (it "emit-vm-eq (dst=RSI, code>=4): CMP + SETE SIL (REX.B=0 needed) + MOVZX RSI,SIL"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-eq
+                (cl-cc/vm:make-vm-eq :dst :r4 :lhs :r0 :rhs :r1) sink)))
+            :to-equalp #(#x48 #x39 #xC8   ; CMP RAX, RCX
+                         #x40 #x0F #x94 #xC6 ; SETE SIL (REX needed for SIL)
+                         #x48 #x0F #xB6 #xF6)))) ; MOVZX RSI, SIL

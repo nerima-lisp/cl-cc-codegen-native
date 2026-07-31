@@ -639,6 +639,25 @@ only owns the accumulation."
       (expect (cl-cc/codegen::%native-inst-reads-phys-p inst :phys-unrelated assignment)
               :to-be nil))))
 
+(describe-sequential "wasm-trampoline-gc.lisp: wasm-array-reg-record-kind / -kind / -copy-kind"
+  (it "record then read round-trips through the same normalization as WASM-NORMALIZE-ARRAY-ELEMENT-KIND"
+    (let ((reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1)))
+      (cl-cc/codegen::wasm-array-reg-record-kind reg-map :r0 'single-float)
+      (expect (cl-cc/codegen::wasm-array-reg-kind reg-map :r0) :to-be :float)))
+  (it "defaults to :eqref for a register with no recorded kind"
+    (let ((reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1)))
+      (expect (cl-cc/codegen::wasm-array-reg-kind reg-map :r0) :to-be :eqref)))
+  (it "copy-kind propagates a recorded kind from src to dst"
+    (let ((reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 2)))
+      (cl-cc/codegen::wasm-array-reg-record-kind reg-map :r0 :char)
+      (cl-cc/codegen::wasm-array-reg-copy-kind reg-map :r1 :r0)
+      (expect (cl-cc/codegen::wasm-array-reg-kind reg-map :r1) :to-be :char)))
+  (it "copy-kind CLEARS any existing kind on dst when src has none recorded (does not leave stale data)"
+    (let ((reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 2)))
+      (cl-cc/codegen::wasm-array-reg-record-kind reg-map :r1 :char)
+      (cl-cc/codegen::wasm-array-reg-copy-kind reg-map :r1 :r0)
+      (expect (cl-cc/codegen::wasm-array-reg-kind reg-map :r1) :to-be :eqref))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

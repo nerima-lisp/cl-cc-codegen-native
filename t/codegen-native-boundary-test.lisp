@@ -928,6 +928,21 @@ only owns the accumulation."
                          #x48 #x83 #xC0 #x40  ; ADD RAX, 64
                          #x90 #x90))))        ; NOP; NOP (fixed 22-byte size)
 
+(describe-sequential "x86-64-emit-ops-bits.lisp: emit-vm-rotate"
+  ;; PUSH RCX; MOV RCX,rhs (rotate count); MOV dst,lhs; ROR dst,CL; POP RCX.
+  ;; Uses RBX/RDX for lhs/rhs (not RCX) so the RCX save/restore role stays
+  ;; visually distinct from the fixture's own operand registers.
+  (it "emits the PUSH/MOV/MOV/ROR/POP sequence for rotr(lhs, rhs)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-rotate
+                (cl-cc/vm:make-vm-rotate :dst :r0 :lhs :r3 :rhs :r2) sink)))
+            :to-equalp #(#x51                  ; PUSH RCX
+                         #x48 #x89 #xD1        ; MOV RCX, RDX (rhs, rotate count)
+                         #x48 #x89 #xD8        ; MOV RAX, RBX (lhs)
+                         #x48 #xD3 #xC8        ; ROR RAX, CL
+                         #x59))))              ; POP RCX
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

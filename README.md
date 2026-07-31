@@ -63,7 +63,7 @@ could leave the external process itself still running.
 SBCL's `sb-cover` via cl-weave's built-in `:coverage` support — no adapter —
 and prints expression/branch percentages for `codegen/src`, `regalloc/src`
 and `emit/src`. As of 2026-07 that baseline is **23.2% expression, 24.9%
-branch** (8437/36383, 641/2572): `t/` is a boundary and regression suite, not
+branch** (8441/36383, 641/2572): `t/` is a boundary and regression suite, not
 exhaustive per-opcode coverage of the three backends' ~30 source files.
 Raising it requires writing tests, not just measuring — this only wires the
 measurement up. `checks.coverage` is informational and does not fail the

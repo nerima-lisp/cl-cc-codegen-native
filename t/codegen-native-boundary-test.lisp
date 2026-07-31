@@ -4674,3 +4674,34 @@ only owns the accumulation."
                          #xEB #x03             ; JMP +3 (skip SAL)
                          #x48 #xD3 #xE0        ; SAL RAX, CL
                          #x59))))              ; POP RCX
+
+(describe-sequential "x86-64-emit-ops.lisp: remaining define-cmp-emitter instances (gt/le/ge/num-eq)"
+  ;; Same CMP+SETcc+MOVZX idiom as the already-tested emit-vm-lt/-eq,
+  ;; differing only in SETcc's opcode byte (SETG=9F, SETLE=9E, SETGE=9D,
+  ;; SETE=94 -- num-eq and eq share the same x86 encoding since this
+  ;; backend's fixnum-only mode makes numeric and general equality
+  ;; identical at the machine-code level).
+  (it "emit-vm-gt uses SETG (0x9F)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-gt
+                (cl-cc/vm:make-vm-gt :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x39 #xD1 #x0F #x9F #xC0 #x48 #x0F #xB6 #xC0)))
+  (it "emit-vm-le uses SETLE (0x9E)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-le
+                (cl-cc/vm:make-vm-le :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x39 #xD1 #x0F #x9E #xC0 #x48 #x0F #xB6 #xC0)))
+  (it "emit-vm-ge uses SETGE (0x9D)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-ge
+                (cl-cc/vm:make-vm-ge :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x39 #xD1 #x0F #x9D #xC0 #x48 #x0F #xB6 #xC0)))
+  (it "emit-vm-num-eq uses SETE (0x94), the same opcode as emit-vm-eq"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-num-eq
+                (cl-cc/vm:make-vm-num-eq :dst :r0 :lhs :r1 :rhs :r2) sink)))
+            :to-equalp #(#x48 #x39 #xD1 #x0F #x94 #xC0 #x48 #x0F #xB6 #xC0))))

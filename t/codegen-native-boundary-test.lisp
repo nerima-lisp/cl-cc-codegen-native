@@ -3910,3 +3910,32 @@ only owns the accumulation."
              "(i64.extend_i32_s (i31.get_s $x))")
             :to-equal "$x")
     (expect (cl-cc/codegen::wasm-i64-extended-i31-source "(i64.const 1)") :to-be nil)))
+
+(describe-sequential "wasm-trampoline-fixnum.lisp: wasm-eq-wat / wasm-ref-cast-maybe (FR-142 type tracking)"
+  ;; Both dispatch on REG-KNOWN-TYPE, recorded via REG-RECORD-TYPE against a
+  ;; WASM-REG-MAP built the same way as the existing wasm-ir.lisp round
+  ;; (INITIALIZE-WASM-PARAM-LOCALS for stable local indices 0/1).
+  (it "wasm-eq-wat compares two known-:i31ref registers numerically via i64.eq + unboxing"
+    (let ((reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 2)))
+      (cl-cc/codegen::initialize-wasm-param-locals reg-map '(:r0 :r1))
+      (cl-cc/codegen::reg-record-type reg-map :r0 :i31ref)
+      (cl-cc/codegen::reg-record-type reg-map :r1 :i31ref)
+      (expect (cl-cc/codegen::wasm-eq-wat reg-map :r0 :r1)
+              :to-equal "(i64.eq (i64.extend_i32_s (i31.get_s (local.get 0))) (i64.extend_i32_s (i31.get_s (local.get 1))))")))
+  (it "wasm-eq-wat falls back to ref.eq when either register's type is unknown"
+    (let ((reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 2)))
+      (cl-cc/codegen::initialize-wasm-param-locals reg-map '(:r0 :r1))
+      (expect (cl-cc/codegen::wasm-eq-wat reg-map :r0 :r1)
+              :to-equal "(ref.eq (local.get 0) (local.get 1))")))
+  (it "wasm-ref-cast-maybe skips the cast when the register's known type already matches TYPE-WAT"
+    (let ((reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1)))
+      (cl-cc/codegen::initialize-wasm-param-locals reg-map '(:r0))
+      (cl-cc/codegen::reg-record-type reg-map :r0 :cons)
+      (expect (cl-cc/codegen::wasm-ref-cast-maybe "(ref $cons_t)" reg-map :r0)
+              :to-equal "(local.get 0)")))
+  (it "wasm-ref-cast-maybe emits ref.cast (wrapped in ref.as_non_null) when the known type doesn't match"
+    (let ((reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1)))
+      (cl-cc/codegen::initialize-wasm-param-locals reg-map '(:r0))
+      (cl-cc/codegen::reg-record-type reg-map :r0 :cons)
+      (expect (cl-cc/codegen::wasm-ref-cast-maybe "(ref $closure_t)" reg-map :r0)
+              :to-equal "(ref.cast (ref $closure_t) (ref.as_non_null (local.get 0)))"))))

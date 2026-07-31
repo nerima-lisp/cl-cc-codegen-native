@@ -3731,3 +3731,62 @@ only owns the accumulation."
                   (setf (gethash "L2" h) 16)
                   h))))
             :to-equalp #(#x82 #x00 #x00 #xB4))))
+
+(describe-sequential "aarch64-emitters.lisp: emit-a64-vm-spill-store / emit-a64-vm-spill-load"
+  ;; VM-SPILL-STORE/-LOAD look up their register directly in
+  ;; *AARCH64-REG-NUMBER* (an :X0..:X30 alist), NOT through A64-REG's
+  ;; generic :Rn fallback -- so the fixture must use :X-prefixed keywords.
+  ;; A64-SPILL-SLOT-OFFSET(1) = 0 - 1*8 = -8 against the default
+  ;; *CURRENT-A64-SPILL-BASE-REG* (X29/FP), a negative SIMM9 field.
+  (it "emit-a64-vm-spill-store encodes STUR Xt,[X29,#-8] for slot 1"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-spill-store
+                (cl-cc/regalloc:make-vm-spill-store :src-reg :x1 :slot 1) sink)))
+            :to-equalp #(#xA1 #x83 #x1F #xF8)))
+  (it "emit-a64-vm-spill-load encodes LDUR Xt,[X29,#-8] for slot 1"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-spill-load
+                (cl-cc/regalloc:make-vm-spill-load :dst-reg :x2 :slot 1) sink)))
+            :to-equalp #(#xA2 #x83 #x5F #xF8))))
+
+(describe-sequential "aarch64-emitters.lisp: emit-a64-vm-prefetch (locality ECASE, indexed addressing, error paths)"
+  (it "emits PRFM PLDL1KEEP (rt=0) for :t0 locality, no index register"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-prefetch
+                (cl-cc/vm:make-vm-prefetch :base-reg :r1 :offset 16 :locality :t0)
+                sink)))
+            :to-equalp #(#x20 #x08 #x80 #xF9)))
+  (it "emits PRFM PLDL1STRM (rt=1) for :nta locality, no index register"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-prefetch
+                (cl-cc/vm:make-vm-prefetch :base-reg :r1 :offset 16 :locality :nta)
+                sink)))
+            :to-equalp #(#x21 #x08 #x80 #xF9)))
+  (it "with an index register at scale 8, first materializes BASE+INDEX*8 into X16 then PRFMs [X16]"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-prefetch
+                (cl-cc/vm:make-vm-prefetch :base-reg :r1 :index-reg :r2 :scale 8
+                                            :offset 0 :locality :t0)
+                sink)))
+            :to-equalp #(#x30 #x0C #x02 #x8B   ; ADD X16, X1, X2, LSL #3
+                         #x00 #x02 #x80 #xF9))) ; PRFM PLDL1KEEP, [X16]
+  (it "signals an error for an indexed prefetch at an unsupported scale"
+    (signals error
+      (%collect-emitted-octets
+       (lambda (sink)
+         (cl-cc/codegen::emit-a64-vm-prefetch
+          (cl-cc/vm:make-vm-prefetch :base-reg :r1 :index-reg :r2 :scale 4
+                                      :offset 0 :locality :t0)
+          sink)))))
+  (it "signals an error for an offset that isn't a multiple of 8"
+    (signals error
+      (%collect-emitted-octets
+       (lambda (sink)
+         (cl-cc/codegen::emit-a64-vm-prefetch
+          (cl-cc/vm:make-vm-prefetch :base-reg :r1 :offset 3 :locality :t0)
+          sink))))))

@@ -480,6 +480,31 @@ only owns the accumulation."
     (expect (cl-cc/codegen::x86-64-phys-code->keyword 5) :to-be :rbp)
     (expect (cl-cc/codegen::x86-64-phys-code->keyword 4) :to-be nil)))
 
+(describe-sequential "x86-64-codegen-emitters.lisp: x86-64-relaxable-branch-p / x86-64-branch-target-offset"
+  (it "x86-64-relaxable-branch-p is T for vm-jump/vm-jump-zero, NIL for an unrelated instruction"
+    (expect (and (cl-cc/codegen::x86-64-relaxable-branch-p
+                  (cl-cc/vm:make-vm-jump :label "L1"))
+                 t)
+            :to-be t)
+    (expect (and (cl-cc/codegen::x86-64-relaxable-branch-p
+                  (cl-cc/vm:make-vm-jump-zero :reg :r0 :label "L1"))
+                 t)
+            :to-be t)
+    (expect (cl-cc/codegen::x86-64-relaxable-branch-p
+             (cl-cc/vm:make-vm-add :dst :r0 :lhs :r1 :rhs :r2))
+            :to-be nil))
+  (it "x86-64-branch-target-offset returns the label's recorded position"
+    (let ((h (make-hash-table :test 'equal)))
+      (setf (gethash "L1" h) 42)
+      (expect (cl-cc/codegen::x86-64-branch-target-offset
+               (cl-cc/vm:make-vm-jump :label "L1") h)
+              :to-be 42)))
+  (it "x86-64-branch-target-offset signals an error for a label absent from LABEL-OFFSETS"
+    (signals error
+      (cl-cc/codegen::x86-64-branch-target-offset
+       (cl-cc/vm:make-vm-jump :label "unknown-label")
+       (make-hash-table :test 'equal)))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

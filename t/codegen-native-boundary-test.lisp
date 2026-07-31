@@ -4988,3 +4988,24 @@ only owns the accumulation."
             sink)))
       :to-equalp
       #(242 15 16 208 242 15 81 210))))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-sin (DEFINE-FLOAT-LIBM-UNARY-EMITTER shape)"
+  ;; The libm CALL address (%LIBM-FUNCTION-ADDRESS resolved via a real FFI
+  ;; lookup at LOAD-TIME-VALUE time) is not reproducible across builds/
+  ;; sandboxes, so this checks the fixed 13 bytes around it rather than the
+  ;; full 21-byte sequence: MOVSD xmm0,src (4) + REX.W+B8/r11 (2) + <8
+  ;; unchecked address bytes> + REX.W+FF/2 CALL r11 (3) + MOVSD dst,xmm0 (4).
+  ;; DEFINE-FLOAT-LIBM-UNARY-EMITTER generates emit-vm-cos/-exp/-log/-tan/
+  ;; -asin/-acos/-atan identically from this same template -- only the
+  ;; resolved libm symbol differs, which this test deliberately doesn't
+  ;; pin, so one representative covers the shared shape.
+  (it "is 21 bytes total: MOVSD-load, MOV R11+imm64, CALL R11, MOVSD-store"
+    (let ((bytes (%collect-emitted-octets
+                  (lambda (sink)
+                    (cl-cc/codegen::emit-vm-sin
+                     (cl-cc/vm:make-vm-sin-inst :dst :r2 :src :r1) sink)))))
+      (expect (length bytes) :to-be 21)
+      (expect (subseq bytes 0 4) :to-equalp #(#xF2 #x0F #x10 #xC1))   ; movsd xmm0, xmm1
+      (expect (subseq bytes 4 6) :to-equalp #(#x49 #xBB))             ; REX.W + B8+3 (mov r11, imm64)
+      (expect (subseq bytes 14 17) :to-equalp #(#x49 #xFF #xD3))      ; REX.W + FF /2 (call r11)
+      (expect (subseq bytes 17 21) :to-equalp #(#xF2 #x0F #x10 #xD0))))) ; movsd xmm2, xmm0

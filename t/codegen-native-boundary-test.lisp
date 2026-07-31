@@ -4872,3 +4872,41 @@ only owns the accumulation."
              (lambda (sink)
                (cl-cc/codegen::emit-x86-64-simd-address 1 2 :f64 sink)))
             :to-equalp #(#x4C #x8D #x5C #xD1 #x08))))
+
+(describe-sequential "x86-64-emit-ops.lisp: emit-vm-simd-vector-op"
+  ;; dst-array=r0(rax=0), lhs-array=r1(rcx=1), rhs-array=r2(rdx=2),
+  ;; index-reg=r3(rbx=3) throughout -- none collide with SIB's reserved
+  ;; index=4 encoding, so X86-64-SIB-INDEX-REGISTER passes INDEX through
+  ;; unchanged and emits nothing. Each branch: load lhs into XMM0, load
+  ;; rhs into XMM1, apply OP, store XMM0 back to dst -- addresses computed
+  ;; via EMIT-X86-64-SIMD-ADDRESS (tested above) into R11 each time.
+  (it "4-lane :i32 :add: PADDD via the 66 0F skeleton, scale-4 addressing"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-simd-vector-op
+                (cl-cc/vm:make-vm-simd-vector-op
+                 :op :add :dst-array :r0 :lhs-array :r1 :rhs-array :r2
+                 :index-reg :r3 :lanes 4 :element-type :i32)
+                sink)))
+            :to-equalp #(#x4C #x8D #x5C #x99 #x08   ; lea r11, [rcx+rbx*4+8]  (lhs)
+                         #xF3 #x41 #x0F #x6F #x03   ; movdqu xmm0, [r11]
+                         #x4C #x8D #x5C #x9A #x08   ; lea r11, [rdx+rbx*4+8]  (rhs)
+                         #xF3 #x41 #x0F #x6F #x0B   ; movdqu xmm1, [r11]
+                         #x66 #x0F #xFE #xC1        ; paddd xmm0, xmm1
+                         #x4C #x8D #x5C #x98 #x08   ; lea r11, [rax+rbx*4+8]  (dst)
+                         #xF3 #x41 #x0F #x7F #x03)))  ; movdqu [r11], xmm0
+  (it ":f64 :add: ADDSD via the F2 0F skeleton, scale-8 addressing"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-simd-vector-op
+                (cl-cc/vm:make-vm-simd-vector-op
+                 :op :add :dst-array :r0 :lhs-array :r1 :rhs-array :r2
+                 :index-reg :r3 :lanes 2 :element-type :f64)
+                sink)))
+            :to-equalp #(#x4C #x8D #x5C #xD9 #x08   ; lea r11, [rcx+rbx*8+8]  (lhs)
+                         #xF3 #x41 #x0F #x6F #x03   ; movdqu xmm0, [r11]
+                         #x4C #x8D #x5C #xDA #x08   ; lea r11, [rdx+rbx*8+8]  (rhs)
+                         #xF3 #x41 #x0F #x6F #x0B   ; movdqu xmm1, [r11]
+                         #x66 #x0F #x58 #xC1        ; addpd xmm0, xmm1
+                         #x4C #x8D #x5C #xD8 #x08   ; lea r11, [rax+rbx*8+8]  (dst)
+                         #xF3 #x41 #x0F #x7F #x03))))  ; movdqu [r11], xmm0

@@ -4909,4 +4909,24 @@ only owns the accumulation."
                          #xF3 #x41 #x0F #x6F #x0B   ; movdqu xmm1, [r11]
                          #x66 #x0F #x58 #xC1        ; addpd xmm0, xmm1
                          #x4C #x8D #x5C #xD8 #x08   ; lea r11, [rax+rbx*8+8]  (dst)
-                         #xF3 #x41 #x0F #x7F #x03))))  ; movdqu [r11], xmm0
+                         #xF3 #x41 #x0F #x7F #x03)))  ; movdqu [r11], xmm0
+  (it "8-lane :i32 :add: VPADDD via the AVX2 VEX skeleton, scale-4 addressing"
+    ;; VMOVDQU ymm,[r11] needs the 3-byte VEX form (B=1, since R11's high
+    ;; bit sets REX.B-equivalent); VPADDD ymm0,ymm0,ymm1 needs only the
+    ;; 2-byte form (B=0, since both operands are low YMM registers) --
+    ;; this branch is the only one in the function that exercises both
+    ;; VEX prefix widths in the same instruction sequence.
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-vm-simd-vector-op
+                (cl-cc/vm:make-vm-simd-vector-op
+                 :op :add :dst-array :r0 :lhs-array :r1 :rhs-array :r2
+                 :index-reg :r3 :lanes 8 :element-type :i32)
+                sink)))
+            :to-equalp #(#x4C #x8D #x5C #x99 #x08   ; lea r11, [rcx+rbx*4+8]  (lhs)
+                         #xC4 #xC1 #x06 #x6F #x03   ; vmovdqu ymm0, [r11]  (3-byte VEX)
+                         #x4C #x8D #x5C #x9A #x08   ; lea r11, [rdx+rbx*4+8]  (rhs)
+                         #xC4 #xC1 #x06 #x6F #x0B   ; vmovdqu ymm1, [r11]  (3-byte VEX)
+                         #xC5 #xFD #xFE #xC1        ; vpaddd ymm0,ymm0,ymm1  (2-byte VEX)
+                         #x4C #x8D #x5C #x98 #x08   ; lea r11, [rax+rbx*4+8]  (dst)
+                         #xC4 #xC1 #x06 #x7F #x03))))  ; vmovdqu [r11], ymm0  (3-byte VEX)

@@ -5366,3 +5366,27 @@ only owns the accumulation."
              :add (list (cl-cc/mir:make-mir-const :value 3))
              (make-hash-table))
             :to-be nil)))
+
+(describe-sequential "isel-core.lisp: vm-program->mir-module"
+  (it "signals an error when given a non-VM-PROGRAM"
+    (signals error (cl-cc/codegen::vm-program->mir-module (quote (:not :a :program)))))
+  (it "converts a labeled/jumping VM-PROGRAM into a linked MIR module"
+    ;; entry: [const r0=1, jump "loop"]  --succ-->  loop: [nop(label), const r1=2, ret r1]
+    (let* ((program (cl-cc/vm:make-vm-program
+                      :instructions
+                      (list (cl-cc/vm:make-vm-const :dst :r0 :value 1)
+                            (cl-cc/vm:make-vm-jump :label "loop")
+                            (cl-cc/vm:make-vm-label :name "loop")
+                            (cl-cc/vm:make-vm-const :dst :r1 :value 2)
+                            (cl-cc/vm:make-vm-ret :reg :r1))))
+           (module (cl-cc/codegen::vm-program->mir-module program))
+           (fn (first (cl-cc/mir:mirm-functions module)))
+           (blocks (cl-cc/mir:mirf-blocks fn))
+           (entry-block (cl-cc/mir:mirf-entry fn))
+           (loop-block (find :loop blocks :key (function cl-cc/mir:mirb-label))))
+      (expect (length blocks) :to-be 2)
+      (expect (mapcar (function cl-cc/mir:miri-op) (cl-cc/mir:mirb-insts entry-block))
+              :to-equal (list :const :jump))
+      (expect (cl-cc/mir:mirb-succs entry-block) :to-equal (list loop-block))
+      (expect (mapcar (function cl-cc/mir:miri-op) (cl-cc/mir:mirb-insts loop-block))
+              :to-equal (list :nop :const :ret)))))

@@ -706,6 +706,26 @@ only owns the accumulation."
                 (cl-cc/regalloc:make-vm-spill-load :dst-reg :t1 :slot 1) sink)))
             :to-equalp #(#x03 #x33 #x84 #xFF))))
 
+(describe-sequential "riscv64-codegen.lisp: emit-riscv64-vm-jump / -jump-zero"
+  (it "emit-riscv64-vm-jump encodes JAL x0,+16 for a forward jump"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-jump
+                (cl-cc/vm:make-vm-jump :label "L1") sink 0
+                (let ((h (make-hash-table :test 'equal)))
+                  (setf (gethash "L1" h) 16)
+                  h))))
+            :to-equalp #(#x6F #x00 #x00 #x01)))
+  (it "emit-riscv64-vm-jump-zero encodes BEQ t0,x0,+16 for a forward jump"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-jump-zero
+                (cl-cc/vm:make-vm-jump-zero :reg :t0 :label "L1") sink 0
+                (let ((h (make-hash-table :test 'equal)))
+                  (setf (gethash "L1" h) 16)
+                  h))))
+            :to-equalp #(#x63 #x88 #x02 #x00))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

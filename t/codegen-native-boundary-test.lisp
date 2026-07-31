@@ -3855,4 +3855,15 @@ only owns the accumulation."
                 (cl-cc/vm:make-vm-sub-checked :dst :r1 :lhs :r2 :rhs :r3) sink)))
             :to-equalp #(#x41 #x00 #x03 #xEB   ; SUBS X1, X2, X3
                          #x47 #x00 #x00 #x54   ; B.VC #2
+                         #x20 #x00 #x20 #xD4))) ; BRK #1
+  (it "emit-a64-vm-mul-checked encodes the 6-instruction SMULH-based overflow check (MUL does not set NZCV)"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-a64-vm-mul-checked
+                (cl-cc/vm:make-vm-mul-checked :dst :r1 :lhs :r2 :rhs :r3) sink)))
+            :to-equalp #(#x41 #x7C #x03 #x9B   ; MUL X1, X2, X3 (low 64 bits)
+                         #x50 #x7C #x43 #x9B   ; SMULH X16, X2, X3 (high 64 bits)
+                         #x31 #xFC #x7F #x93   ; ASR X17, X1, #63 (sign_extend(X1))
+                         #x1F #x02 #x11 #xEB   ; CMP X16, X17
+                         #x20 #x00 #x00 #x54   ; B.EQ #1
                          #x20 #x00 #x20 #xD4)))) ; BRK #1

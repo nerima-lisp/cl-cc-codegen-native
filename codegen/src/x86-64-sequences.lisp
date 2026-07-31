@@ -182,23 +182,9 @@
 
 ;;; Logical / Bitwise Operations
 
-(defun emit-and-rr64 (dst src stream)
-  "AND dst, src (64-bit). REX.W + 21 /r"
-  (emit-byte (rex-prefix :w 1 :r (ash src -3) :b (ash dst -3)) stream)
-  (emit-byte #x21 stream)
-  (emit-byte (modrm 3 src dst) stream))
-
-(defun emit-or-rr64 (dst src stream)
-  "OR dst, src (64-bit). REX.W + 09 /r"
-  (emit-byte (rex-prefix :w 1 :r (ash src -3) :b (ash dst -3)) stream)
-  (emit-byte #x09 stream)
-  (emit-byte (modrm 3 src dst) stream))
-
-(defun emit-xor-rr64 (dst src stream)
-  "XOR dst, src (64-bit). REX.W + 31 /r"
-  (emit-byte (rex-prefix :w 1 :r (ash src -3) :b (ash dst -3)) stream)
-  (emit-byte #x31 stream)
-  (emit-byte (modrm 3 src dst) stream))
+(define-alu-rr64 and #x21 "AND dst, src (64-bit). REX.W + 21 /r")
+(define-alu-rr64 or  #x09 "OR dst, src (64-bit). REX.W + 09 /r")
+(define-alu-rr64 xor #x31 "XOR dst, src (64-bit). REX.W + 31 /r")
 
 (defun emit-not-r64 (reg stream)
   "NOT reg (bitwise complement 64-bit). REX.W + F7 /2"

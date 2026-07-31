@@ -4788,3 +4788,18 @@ only owns the accumulation."
                  (cl-cc/codegen::emit-vm-move
                   (cl-cc/vm:make-vm-move :dst :r0 :src :r1) sink)))
               :to-equalp #(#xF2 #x0F #x10 #xC1)))))
+
+(describe-sequential "x86-64-emit-ops.lisp: x86-64-array-element-scale / x86-64-sib-index-register"
+  (it "x86-64-array-element-scale is always 8 (word-addressed vector layout), ignoring its argument"
+    (expect (cl-cc/codegen::x86-64-array-element-scale :anything) :to-be 8))
+  (it "x86-64-sib-index-register returns INDEX unchanged and emits nothing when it doesn't collide with SIB's special encoding"
+    (let (bytes)
+      (let ((result (cl-cc/codegen::x86-64-sib-index-register 2 (lambda (b) (push b bytes)))))
+        (expect result :to-be 2)
+        (expect (coerce (nreverse bytes) '(simple-array (unsigned-byte 8) (*))) :to-equalp #()))))
+  (it "x86-64-sib-index-register moves INDEX into R11 and returns R11 when (logand index #x7) = 4 (RSP/R12 collide with SIB's no-index encoding)"
+    (let (bytes)
+      (let ((result (cl-cc/codegen::x86-64-sib-index-register 4 (lambda (b) (push b bytes)))))
+        (expect result :to-be 11)
+        (expect (coerce (nreverse bytes) '(simple-array (unsigned-byte 8) (*)))
+                :to-equalp #(#x49 #x89 #xE3)))))) ; MOV R11, RSP

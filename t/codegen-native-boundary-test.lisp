@@ -3939,3 +3939,34 @@ only owns the accumulation."
       (cl-cc/codegen::reg-record-type reg-map :r0 :cons)
       (expect (cl-cc/codegen::wasm-ref-cast-maybe "(ref $closure_t)" reg-map :r0)
               :to-equal "(ref.cast (ref $closure_t) (ref.as_non_null (local.get 0)))"))))
+
+(describe-sequential "wasm-trampoline-gc.lisp: array element-kind normalization and WAT primitives"
+  (it "wasm-normalize-array-element-kind maps each CL/VM type designator group to its Wasm array kind"
+    (expect (cl-cc/codegen::wasm-normalize-array-element-kind 'fixnum) :to-be :fixnum)
+    (expect (cl-cc/codegen::wasm-normalize-array-element-kind :integer) :to-be :fixnum)
+    (expect (cl-cc/codegen::wasm-normalize-array-element-kind 'double-float) :to-be :float)
+    (expect (cl-cc/codegen::wasm-normalize-array-element-kind :float) :to-be :float)
+    (expect (cl-cc/codegen::wasm-normalize-array-element-kind 'character) :to-be :char)
+    (expect (cl-cc/codegen::wasm-normalize-array-element-kind t) :to-be :eqref)
+    (expect (cl-cc/codegen::wasm-normalize-array-element-kind nil) :to-be :eqref)
+    (expect (cl-cc/codegen::wasm-normalize-array-element-kind :something-unrecognized) :to-be :eqref))
+  (it "wasm-array-type-name/-type-ref look up the WAT type name/ref for a (possibly unnormalized) kind"
+    (expect (cl-cc/codegen::wasm-array-type-name :fixnum) :to-equal "$fixnum_array_t")
+    (expect (cl-cc/codegen::wasm-array-type-name 'fixnum) :to-equal "$fixnum_array_t")
+    (expect (cl-cc/codegen::wasm-array-type-name :char) :to-equal "$char_array_t")
+    (expect (cl-cc/codegen::wasm-array-type-ref :fixnum) :to-equal "(ref $fixnum_array_t)"))
+  (it "wasm-vector-literal-kind infers the narrowest kind from a CL vector literal's elements"
+    (expect (cl-cc/codegen::wasm-vector-literal-kind '(1 2 3)) :to-be :fixnum)
+    (expect (cl-cc/codegen::wasm-vector-literal-kind '(1.0 2.0)) :to-be :float)
+    (expect (cl-cc/codegen::wasm-vector-literal-kind (list #\a #\b)) :to-be :char)
+    (expect (cl-cc/codegen::wasm-vector-literal-kind '()) :to-be :eqref)
+    (expect (cl-cc/codegen::wasm-vector-literal-kind '(1 "mixed")) :to-be :eqref))
+  (it "wasm-value-to-array-element-wat formats a raw value for its specialized array kind"
+    (expect (cl-cc/codegen::wasm-value-to-array-element-wat 42 :fixnum) :to-equal "(i64.const 42)")
+    (expect (cl-cc/codegen::wasm-value-to-array-element-wat 3.5 :float) :to-equal "(f64.const 3.5)")
+    (expect (cl-cc/codegen::wasm-value-to-array-element-wat #\a :char) :to-equal "(i32.const 97)"))
+  (it "wasm-array-default-wat returns each kind's zero/null-equivalent initializer"
+    (expect (cl-cc/codegen::wasm-array-default-wat :fixnum) :to-equal "(i64.const 0)")
+    (expect (cl-cc/codegen::wasm-array-default-wat :float) :to-equal "(f64.const 0.0)")
+    (expect (cl-cc/codegen::wasm-array-default-wat :char) :to-equal "(i32.const 0)")
+    (expect (cl-cc/codegen::wasm-array-default-wat :eqref) :to-equal "(ref.null eq)")))

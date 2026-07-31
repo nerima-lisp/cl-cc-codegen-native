@@ -726,6 +726,31 @@ only owns the accumulation."
                   h))))
             :to-equalp #(#x63 #x88 #x02 #x00))))
 
+(describe-sequential "riscv64-codegen.lisp: emit-riscv64-vm-select (*riscv64-zicond-enabled* branch)"
+  ;; Default T: branchless via Zicond CZERO.EQZ/CZERO.NEZ/OR. Disabled:
+  ;; falls back to a placeholder ADDI dst,then,0 that ignores cond/else
+  ;; entirely -- per the function's own docstring, a known-incomplete
+  ;; non-Zicond path, not a real conditional select.
+  (it "with Zicond enabled (default): CZERO.EQZ t0,then,cond + CZERO.NEZ dst,else,cond + OR dst,dst,t0"
+    (expect (%collect-emitted-octets
+             (lambda (sink)
+               (cl-cc/codegen::emit-riscv64-vm-select
+                (cl-cc/vm:make-vm-select :dst :a0 :cond-reg :t3
+                                          :then-reg :t1 :else-reg :t2)
+                sink)))
+            :to-equalp #(#xB3 #x52 #xC3 #x0F   ; CZERO.EQZ t0, t1, t3
+                         #x33 #xF5 #xC3 #x0F   ; CZERO.NEZ a0, t2, t3
+                         #x33 #x65 #x55 #x00))) ; OR a0, a0, t0
+  (it "with Zicond disabled: emits only the placeholder ADDI dst,then,0"
+    (let ((cl-cc/codegen::*riscv64-zicond-enabled* nil))
+      (expect (%collect-emitted-octets
+               (lambda (sink)
+                 (cl-cc/codegen::emit-riscv64-vm-select
+                  (cl-cc/vm:make-vm-select :dst :a0 :cond-reg :t3
+                                            :then-reg :t1 :else-reg :t2)
+                  sink)))
+              :to-equalp #(#x13 #x05 #x03 #x00)))))
+
 (describe-sequential "isel-core.lisp: %isel-variable-pattern-p pattern-variable detection"
   (it-each ((?x t) (?lhs t) (x nil) (:reg nil) (1 nil))
       "?-prefixed symbols are pattern variables: ~S => ~A"

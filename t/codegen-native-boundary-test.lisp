@@ -1866,6 +1866,17 @@ only owns the accumulation."
   (it "signals an error for an invalid memory order"
     (signals error (cl-cc/codegen::codegen-memory-order :bogus))))
 
+(describe-sequential "x86-64-codegen-dispatch.lisp: emit-vm-func-ref-inst"
+  (it "materializes the target label with RIP-relative LEA"
+    (let ((label-offsets (make-hash-table :test (quote equal))))
+      (setf (gethash "callee" label-offsets) 17)
+      (expect
+       (%collect-emitted-octets
+        (lambda (sink)
+          (cl-cc/codegen::emit-vm-instruction-with-labels
+           (cl-cc/vm:make-vm-func-ref :dst :r1 :label "callee" :params nil)
+           sink 10 label-offsets)))
+       :to-equalp #(#x48 #x8D #x0D 0 0 0 0)))))
 (describe-sequential "x86-64-codegen-dispatch.lisp: fits-in-rel8-p"
   (it-each ((0 t) (127 t) (-128 t) (128 nil) (-129 nil))
       "fits-in-rel8-p(~A) => ~A"

@@ -73,6 +73,7 @@ virtual registers."
     ((vm-integer-mul-high-u vm-integer-mul-high-s) 19) ; mul-high sequence + mov
     ;; Control flow
     (vm-halt                            3)  ; mov result to RAX
+    (vm-func-ref 7)
     (vm-label                           0)  ; Labels emit no code
     (vm-jump                            5)  ; JMP rel32
     (vm-jump-zero                       9)  ; TEST + JE rel32 (3 + 6)

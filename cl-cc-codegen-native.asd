@@ -49,5 +49,5 @@
              (declare (ignore op system))
              ;; RUN-ALL, not RUN-ALL-TESTS: the cl-weave that reaches this
              ;; repository through its transitive inputs is the older API.
-             (unless (uiop:symbol-call :cl-weave :run-all :reporter :spec)
+             (unless (host-kit:symbol-call :cl-weave :run-all :reporter :spec)
                (error "cl-cc-codegen-native test suite failed."))))

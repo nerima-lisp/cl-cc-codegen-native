@@ -14,7 +14,7 @@
   :version "0.1.0"
   :depends-on (:cl-cc-bootstrap :cl-cc-vm :cl-cc-mir :cl-cc-target
                :cl-cc-binary
-               :cl-cc-optimize :cl-cc-regalloc :cl-process-kit)
+               :cl-cc-optimize :cl-cc-regalloc :cl-process-kit :cl-host-kit)
   :pathname "src"
   :serial t
   :components

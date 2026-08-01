@@ -241,6 +241,6 @@ for (let i = 0; i < workerCount; i++) {~%
   "Emit worker bootstrap JavaScript as an opt-in WAT annotation comment."
   (when (wasm-threads-feature-enabled-p)
     (format stream "~%  ;; FR-203: worker bootstrap JavaScript")
-    (dolist (line (uiop:split-string (codegen-wasm-worker-runtime-initialization)
-                                     :separator '(#\Newline)))
+    (dolist (line (host-kit:split-string (codegen-wasm-worker-runtime-initialization)
+                                         :separator '(#\Newline)))
       (format stream "~%  ;; ~A" line))))

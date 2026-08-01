@@ -58,22 +58,22 @@ back to the un-processed bytes/WAT exactly as it does on tool failure.")
 (defun %wasm-temp-path (suffix)
   (merge-pathnames (make-pathname :name (format nil "cl-cc-wasm-~A" (gensym))
                                   :type suffix)
-                   (uiop:temporary-directory)))
+                   (host-kit:temporary-directory)))
 
 (defun %wasm-hex-digest-file (path bits)
   "Return a hex digest for PATH using shasum/sha*sum/openssl when available."
   (or (when (wasm-tool-available-p "shasum")
         (let ((out (wasm-run-tool-to-string
                     (list "shasum" "-a" (princ-to-string bits) (namestring path)))))
-          (and out (first (uiop:split-string out :separator '(#\Space #\Tab #\Newline))))))
+          (and out (first (host-kit:split-string out :separator '(#\Space #\Tab #\Newline))))))
       (let ((tool (format nil "sha~Dsum" bits)))
         (when (wasm-tool-available-p tool)
           (let ((out (wasm-run-tool-to-string (list tool (namestring path)))))
-            (and out (first (uiop:split-string out :separator '(#\Space #\Tab #\Newline)))))))
+            (and out (first (host-kit:split-string out :separator '(#\Space #\Tab #\Newline)))))))
       (when (wasm-tool-available-p "openssl")
         (let ((out (wasm-run-tool-to-string
                     (list "openssl" "dgst" (format nil "-sha~D" bits) "-r" (namestring path)))))
-          (and out (first (uiop:split-string out :separator '(#\Space #\Tab #\Newline))))))))
+          (and out (first (host-kit:split-string out :separator '(#\Space #\Tab #\Newline))))))))
 
 (defun %wasm-byte-vector-hex-digest (bytes bits)
   (let ((tmp (%wasm-temp-path "wasm")))

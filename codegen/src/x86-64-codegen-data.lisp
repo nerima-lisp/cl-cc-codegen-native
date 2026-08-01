@@ -62,6 +62,7 @@ virtual registers."
   '(
     ;; Constants and copies
     (vm-const                          10)  ; REX + opcode + 8-byte immediate
+    (vm-get-global                     10)  ; materialize NIL in the staging backend
     (vm-move                            3)  ; REX + opcode + ModR/M
     ;; Arithmetic: mov + op
     ((vm-add vm-integer-add)            6)  ; mov + add (3+3)

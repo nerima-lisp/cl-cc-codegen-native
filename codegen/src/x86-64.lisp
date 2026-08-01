@@ -132,6 +132,10 @@ register state, and jumps to this label."
   (format stream "  mov ~A, ~A~%"
           (target-register target (vm-dst inst))
           (vm-value inst)))
+(defmethod emit-instruction ((target x86-64-target) (inst vm-get-global) stream)
+  "Materialize NIL for VM-GET-GLOBAL in the native staging backend."
+  (format stream "  mov ~A, 0~%"
+          (target-register target (vm-dst inst))))
 
 (defmethod emit-instruction ((target x86-64-target) (inst vm-move) stream)
   (format stream "  mov ~A, ~A~%"

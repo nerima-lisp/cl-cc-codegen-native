@@ -102,6 +102,14 @@
       url = "github:nerima-lisp/cl-host-kit/v0.2.1";
       flake = false;
     };
+    cl-regex-kit = {
+      url = "github:nerima-lisp/cl-regex-kit/d7d1a0e4d5a15765b1f781993949ae2e3cb796f9";
+      flake = false;
+    };
+    cl-tty-kit = {
+      url = "github:nerima-lisp/cl-tty-kit/v1.0.3";
+      flake = false;
+    };
     # Pinned to a release tag. A bare `github:nerima-lisp/cl-weave` follows
     # that repository's default branch, so an upstream push to main would
     # break this repository's CI without warning. This used to be a
@@ -148,6 +156,8 @@
       cl-date-kit,
       cl-concurrent-kit,
       cl-host-kit,
+      cl-regex-kit,
+      cl-tty-kit,
       cl-process-kit,
       cl-json-kit,
       cl-boundary-kit,
@@ -175,7 +185,7 @@
       # CL_SOURCE_REGISTRY for the test, coverage and dev environments.
       # cl-cc-mir's own source tree also provides cl-cc-target (folded in
       # 2026-08-01), so one ${cl-cc-mir}//: entry resolves both systems.
-      sourceRegistry = "${cl-weave}//:${cl-cc-ast}//:${cl-cc-type}//:${cl-cc-bootstrap}//:${cl-cc-runtime}//:${cl-cc-vm}//:${cl-cc-mir}//:${cl-cc-binary}//:${cl-cc-optimize}//:${cl-prolog}//:${cl-parser-kit}//:${cl-log-kit}//:${cl-date-kit}//:${cl-concurrent-kit}//:${cl-host-kit}//:${cl-process-kit}//:${cl-json-kit}//:${cl-boundary-kit}//:${self}//";
+      sourceRegistry = "${cl-weave}//:${cl-cc-ast}//:${cl-cc-type}//:${cl-cc-bootstrap}//:${cl-cc-runtime}//:${cl-cc-vm}//:${cl-cc-mir}//:${cl-cc-binary}//:${cl-cc-optimize}//:${cl-prolog}//:${cl-parser-kit}//:${cl-log-kit}//:${cl-date-kit}//:${cl-concurrent-kit}//:${cl-host-kit}//:${cl-regex-kit}//:${cl-tty-kit}//:${cl-process-kit}//:${cl-json-kit}//:${cl-boundary-kit}//:${self}//";
 
       # Single source of truth for the package version: the `:version` form in
       # cl-cc-codegen-native.asd. A release only ever edits the .asd file and every Nix

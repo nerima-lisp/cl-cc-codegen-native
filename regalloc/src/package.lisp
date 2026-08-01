@@ -40,6 +40,7 @@
     #:*load-print* #:*load-verbose*
     #:read-preserving-whitespace #:read-delimited-list
     #:set-syntax-from-char
+    #:vm-simd-vector-op-p
 )
   (:export
    ;; ─── regalloc.lisp — register allocation ──────────────────────────

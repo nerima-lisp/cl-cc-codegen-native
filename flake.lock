@@ -312,6 +312,40 @@
         "type": "github"
       }
     },
+    "cl-regex-kit": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1785550158,
+        "narHash": "sha256-0W3ZmNlo0AuiZODm7YiV7/LPtC1kIfhSSLUCEkJIGYo=",
+        "owner": "nerima-lisp",
+        "repo": "cl-regex-kit",
+        "rev": "d7d1a0e4d5a15765b1f781993949ae2e3cb796f9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nerima-lisp",
+        "repo": "cl-regex-kit",
+        "rev": "d7d1a0e4d5a15765b1f781993949ae2e3cb796f9",
+        "type": "github"
+      }
+    },
+    "cl-tty-kit": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1785433893,
+        "narHash": "sha256-jc49xw2wHeCT3ckPKbr1mIosrVs/jhe5kZQcHoJSJdA=",
+        "owner": "nerima-lisp",
+        "repo": "cl-tty-kit",
+        "rev": "c0a39f74afe6b0a14f7b0df6df86f310b6c7f327",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nerima-lisp",
+        "ref": "v1.0.3",
+        "repo": "cl-tty-kit",
+        "type": "github"
+      }
+    },
     "cl-weave": {
       "inputs": {
         "cl-nix-forge": "cl-nix-forge",
@@ -433,6 +467,8 @@
         "cl-parser-kit": "cl-parser-kit",
         "cl-process-kit": "cl-process-kit",
         "cl-prolog": "cl-prolog",
+        "cl-regex-kit": "cl-regex-kit",
+        "cl-tty-kit": "cl-tty-kit",
         "cl-weave": "cl-weave",
         "nixpkgs": "nixpkgs",
         "paredit-cli": "paredit-cli_2",

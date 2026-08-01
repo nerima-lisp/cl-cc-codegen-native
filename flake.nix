@@ -11,10 +11,11 @@
     # reference, which follows the default branch: an upstream push changed this
     # build with no change here and no warning.
     #
-    # A SHA rather than a tag, deliberately. cl-cc-mir and cl-cc-target have
-    # published no tags at all, so a SHA is the only immutable target that
-    # exists for them -- the case CONFORMANCE.md names when it accepts a SHA as
-    # equivalent to a tag. For the rest, the tags that do exist are older than
+    # A SHA rather than a tag, deliberately. cl-cc-mir (which also provides
+    # cl-cc-target, folded in 2026-08-01 -- see its own flake.nix / README for
+    # why) has published no tags at all, so a SHA is the only immutable target
+    # that exists for it -- the case CONFORMANCE.md names when it accepts a
+    # SHA as equivalent to a tag. For the rest, the tags that do exist are older than
     # the default-branch commits this repository has actually been building
     # against, so pinning to them would move the build backwards rather than
     # freeze it. These SHAs are the commits the bare references already
@@ -42,12 +43,12 @@
       url = "github:nerima-lisp/cl-cc-vm/4508154e0a170c2dc7647825f7b41741e1de1ff7";
       flake = false;
     };
+    # Also provides cl-cc-target (folded in 2026-08-01: the two were always
+    # co-consumed as a pair and combined under 1000 loc). No separate
+    # cl-cc-target input any more -- both systems come from this one source
+    # tree via CL_SOURCE_REGISTRY below.
     cl-cc-mir = {
-      url = "github:nerima-lisp/cl-cc-mir/96034e6bb8629e9a30636bb92204d3dc20d69efd";
-      flake = false;
-    };
-    cl-cc-target = {
-      url = "github:nerima-lisp/cl-cc-target/e5edaec0c34336ddbbe0f44c9d4b8ba8bda1dfc1";
+      url = "github:nerima-lisp/cl-cc-mir/9679e3a471df1bea446df9b22cb26a32e85c42c8";
       flake = false;
     };
     cl-cc-binary = {
@@ -139,7 +140,6 @@
       cl-cc-runtime,
       cl-cc-vm,
       cl-cc-mir,
-      cl-cc-target,
       cl-cc-binary,
       cl-cc-optimize,
       cl-prolog,
@@ -173,7 +173,9 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
       # CL_SOURCE_REGISTRY for the test, coverage and dev environments.
-      sourceRegistry = "${cl-weave}//:${cl-cc-ast}//:${cl-cc-type}//:${cl-cc-bootstrap}//:${cl-cc-runtime}//:${cl-cc-vm}//:${cl-cc-mir}//:${cl-cc-target}//:${cl-cc-binary}//:${cl-cc-optimize}//:${cl-prolog}//:${cl-parser-kit}//:${cl-log-kit}//:${cl-date-kit}//:${cl-concurrent-kit}//:${cl-host-kit}//:${cl-process-kit}//:${cl-json-kit}//:${cl-boundary-kit}//:${self}//";
+      # cl-cc-mir's own source tree also provides cl-cc-target (folded in
+      # 2026-08-01), so one ${cl-cc-mir}//: entry resolves both systems.
+      sourceRegistry = "${cl-weave}//:${cl-cc-ast}//:${cl-cc-type}//:${cl-cc-bootstrap}//:${cl-cc-runtime}//:${cl-cc-vm}//:${cl-cc-mir}//:${cl-cc-binary}//:${cl-cc-optimize}//:${cl-prolog}//:${cl-parser-kit}//:${cl-log-kit}//:${cl-date-kit}//:${cl-concurrent-kit}//:${cl-host-kit}//:${cl-process-kit}//:${cl-json-kit}//:${cl-boundary-kit}//:${self}//";
 
       # Single source of truth for the package version: the `:version` form in
       # cl-cc-codegen-native.asd. A release only ever edits the .asd file and every Nix

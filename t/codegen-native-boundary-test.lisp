@@ -1877,7 +1877,16 @@ only owns the accumulation."
            (cl-cc/vm:make-vm-func-ref :dst :r1 :label "callee" :params nil)
            sink 10 label-offsets)))
        :to-equalp #(#x48 #x8D #x0D 0 0 0 0)))))
-(describe-sequential "x86-64.lisp: legacy VM-FUNC-REF emission"
+(describe-sequential "x86-64-codegen-dispatch.lisp: VM-GET-GLOBAL emission"
+  (it "materializes NIL in the destination register"
+    (expect
+     (%collect-emitted-octets
+      (lambda (sink)
+        (cl-cc/codegen::emit-vm-instruction-with-labels
+         (cl-cc/vm:make-vm-get-global :dst :r1 :name (quote unbound))
+         sink 0 (make-hash-table :test (quote equal)))))
+     :to-equalp #(#x48 #xB9 0 0 0 0 0 0 0 0))))
+(describe-sequential "x86-64.lisp: legacy VM-FUNC-REF and VM-GET-GLOBAL emission"
   (it "materializes the target label with RIP-relative LEA"
     (expect
      (with-output-to-string (stream)
@@ -1885,7 +1894,15 @@ only owns the accumulation."
         (make-instance (quote cl-cc/codegen:x86-64-target))
         (cl-cc/vm:make-vm-func-ref :dst :r1 :label "callee" :params nil)
         stream))
-     :to-equal (format nil "  lea rbx, [rel callee]~%"))))
+     :to-equal (format nil "  lea rbx, [rel callee]~%")))
+  (it "materializes NIL in the destination register"
+    (expect
+     (with-output-to-string (stream)
+       (cl-cc/codegen::emit-instruction
+        (make-instance (quote cl-cc/codegen:x86-64-target))
+        (cl-cc/vm:make-vm-get-global :dst :r1 :name (quote unbound))
+        stream))
+     :to-equal (format nil "  mov rbx, 0~%"))))
 (describe-sequential "x86-64-codegen-dispatch.lisp: fits-in-rel8-p"
   (it-each ((0 t) (127 t) (-128 t) (128 nil) (-129 nil))
       "fits-in-rel8-p(~A) => ~A"

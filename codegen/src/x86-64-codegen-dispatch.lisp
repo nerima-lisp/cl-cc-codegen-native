@@ -363,6 +363,7 @@ materializes explicit CET SS instructions under the shadow-stack gate:
 (defparameter *x86-64-emitter-entries*
   '(;; Core instructions
     (vm-const        . emit-vm-const)
+    (vm-get-global   . emit-vm-get-global)
     (x86-64-lea-address . emit-x86-64-lea-address-inst)
     (x86-64-bextr-field . emit-x86-64-bextr-field-inst)
     (vm-move         . emit-vm-move)

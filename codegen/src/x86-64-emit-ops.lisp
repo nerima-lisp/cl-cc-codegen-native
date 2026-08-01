@@ -108,6 +108,12 @@ short-circuits when LHS is nonzero)."
               (int-value (vm-const-to-integer value)))
           (emit-mov-ri64 dst int-value stream)))))
 
+(defun emit-vm-get-global (inst stream)
+  "Materialize NIL for VM-GET-GLOBAL in the native staging backend."
+  (emit-mov-ri64 (vm-reg-to-x86 (vm-dst inst))
+                 (vm-const-to-integer nil)
+                 stream))
+
 (defun emit-vm-move (inst stream)
   "Emit code for VM MOVE instruction."
   (if (or (x86-64-float-vreg-p (vm-dst inst))

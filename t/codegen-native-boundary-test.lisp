@@ -1877,6 +1877,15 @@ only owns the accumulation."
            (cl-cc/vm:make-vm-func-ref :dst :r1 :label "callee" :params nil)
            sink 10 label-offsets)))
        :to-equalp #(#x48 #x8D #x0D 0 0 0 0)))))
+(describe-sequential "x86-64.lisp: legacy VM-FUNC-REF emission"
+  (it "materializes the target label with RIP-relative LEA"
+    (expect
+     (with-output-to-string (stream)
+       (cl-cc/codegen::emit-instruction
+        (make-instance (quote cl-cc/codegen:x86-64-target))
+        (cl-cc/vm:make-vm-func-ref :dst :r1 :label "callee" :params nil)
+        stream))
+     :to-equal (format nil "  lea rbx, [rel callee]~%"))))
 (describe-sequential "x86-64-codegen-dispatch.lisp: fits-in-rel8-p"
   (it-each ((0 t) (127 t) (-128 t) (128 nil) (-129 nil))
       "fits-in-rel8-p(~A) => ~A"

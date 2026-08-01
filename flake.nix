@@ -6,44 +6,60 @@
     # release tests pass, so it is less likely to land a broken build.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    # The cl-cc-* siblings below are pinned to 40-character commit SHAs, not to
+    # release tags. Every one of them was a bare `github:nerima-lisp/<name>`
+    # reference, which follows the default branch: an upstream push changed this
+    # build with no change here and no warning.
+    #
+    # A SHA rather than a tag, deliberately. cl-cc-mir and cl-cc-target have
+    # published no tags at all, so a SHA is the only immutable target that
+    # exists for them -- the case CONFORMANCE.md names when it accepts a SHA as
+    # equivalent to a tag. For the rest, the tags that do exist are older than
+    # the default-branch commits this repository has actually been building
+    # against, so pinning to them would move the build backwards rather than
+    # freeze it. These SHAs are the commits the bare references already
+    # resolved to, so the build does not change; only the drift stops.
+    #
+    # Re-resolve before bumping, and do not copy a SHA you have not resolved:
+    #   gh api repos/nerima-lisp/<name>/commits/main --jq .sha
     cl-cc-ast = {
-      url = "github:nerima-lisp/cl-cc-ast";
+      url = "github:nerima-lisp/cl-cc-ast/ad554c7a7401cdf454707eb56a37da6aaaea2a95";
       flake = false;
     };
     cl-cc-type = {
-      url = "github:nerima-lisp/cl-cc-type";
+      url = "github:nerima-lisp/cl-cc-type/adf449080c07dea93bd7947f51b6eba8277a7bf6";
       flake = false;
     };
     cl-cc-bootstrap = {
-      url = "github:nerima-lisp/cl-cc-bootstrap";
+      url = "github:nerima-lisp/cl-cc-bootstrap/821bc1f853dbdad2a66e852216d651a7deee5ad2";
       flake = false;
     };
     cl-cc-runtime = {
-      url = "github:nerima-lisp/cl-cc-runtime";
+      url = "github:nerima-lisp/cl-cc-runtime/e47f0917abc759f4798633cfa427f30ad08eb277";
       flake = false;
     };
     cl-cc-vm = {
-      url = "github:nerima-lisp/cl-cc-vm";
+      url = "github:nerima-lisp/cl-cc-vm/4508154e0a170c2dc7647825f7b41741e1de1ff7";
       flake = false;
     };
     cl-cc-mir = {
-      url = "github:nerima-lisp/cl-cc-mir";
+      url = "github:nerima-lisp/cl-cc-mir/96034e6bb8629e9a30636bb92204d3dc20d69efd";
       flake = false;
     };
     cl-cc-target = {
-      url = "github:nerima-lisp/cl-cc-target";
+      url = "github:nerima-lisp/cl-cc-target/e5edaec0c34336ddbbe0f44c9d4b8ba8bda1dfc1";
       flake = false;
     };
     cl-cc-binary = {
-      url = "github:nerima-lisp/cl-cc-binary";
+      url = "github:nerima-lisp/cl-cc-binary/b70205834e711181bd2c2ec0299bd5c3ab5e0673";
       flake = false;
     };
     cl-cc-optimize = {
-      url = "github:nerima-lisp/cl-cc-optimize";
+      url = "github:nerima-lisp/cl-cc-optimize/9f0587ea9211ea4d234b045cfb8d71a1fb40bab4";
       flake = false;
     };
     cl-prolog = {
-      url = "github:nerima-lisp/cl-prolog";
+      url = "github:nerima-lisp/cl-prolog/c0b22e98b0ac54f94e0949ed1e2b347f36a78635";
       flake = false;
     };
     cl-parser-kit = {

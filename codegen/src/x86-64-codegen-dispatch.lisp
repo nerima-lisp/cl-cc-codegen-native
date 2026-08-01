@@ -258,6 +258,18 @@ materializes explicit CET SS instructions under the shadow-stack gate:
           (size (instruction-size inst))
           (offset (- target-pos (+ current-pos size))))
     (emit-branch-relaxed :jmp offset inst stream)))
+(defun emit-vm-func-ref-inst (inst stream current-pos label-offsets)
+  "Materialize a VM-FUNC-REF target label as an x86-64 code address."
+  (let ((dst (vm-reg-to-x86 (vm-dst inst)))
+        (target-label (vm-label-name inst))
+        (size (instruction-size inst)))
+    (multiple-value-bind (target-pos found-p)
+        (gethash target-label label-offsets)
+      (unless found-p
+        (error "Unknown x86-64 label for VM-FUNC-REF: ~A" target-label))
+      (emit-lea-rip-relative dst
+                             (- target-pos (+ current-pos size))
+                             stream))))
 
 (defun emit-vm-jump-zero-inst (inst stream current-pos label-offsets)
   "Emit code for VM JUMP-ZERO instruction (jump if register is zero).
@@ -482,17 +494,16 @@ materializes explicit CET SS instructions under the shadow-stack gate:
   "Maps VM instruction type symbols to emitter functions (inst stream).")
 
 (defun emit-vm-instruction-with-labels (inst stream current-pos label-offsets)
-  "Emit machine code for a VM instruction, with label/jump support."
+  "Emit machine code for a VM instruction, with label-aware lowering."
   (let ((tp (type-of inst)))
     (cond
-      ;; No-op instructions
-      ((eq tp 'vm-label) nil)
-      ;; Jump instructions need extra args (current-pos, label-offsets)
-      ((eq tp 'vm-jump)
+      ((eq tp (quote vm-label)) nil)
+      ((eq tp (quote vm-jump))
        (emit-vm-jump-inst inst stream current-pos label-offsets))
-      ((eq tp 'vm-jump-zero)
+      ((eq tp (quote vm-jump-zero))
        (emit-vm-jump-zero-inst inst stream current-pos label-offsets))
-      ;; Table-driven dispatch for all (inst stream) emitters
+      ((eq tp (quote vm-func-ref))
+       (emit-vm-func-ref-inst inst stream current-pos label-offsets))
       (t (let ((emitter (gethash tp *x86-64-emitter-table*)))
            (if emitter
                (funcall emitter inst stream)

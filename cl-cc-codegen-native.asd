@@ -49,5 +49,11 @@
              (declare (ignore op system))
              ;; RUN-ALL, not RUN-ALL-TESTS: the cl-weave that reaches this
              ;; repository through its transitive inputs is the older API.
-             (unless (host-kit:symbol-call :cl-weave :run-all :reporter :spec)
+             ;;
+             ;; Not HOST-KIT:SYMBOL-CALL: a .asd is read before :depends-on
+             ;; is ever consulted, so a CL-HOST-KIT-prefixed token here would
+             ;; be a read-time PACKAGE-DOES-NOT-EXIST error regardless of
+             ;; what the system depends on. FIND-SYMBOL/FIND-PACKAGE/FUNCALL
+             ;; are CL, always present.
+             (unless (funcall (find-symbol "RUN-ALL" (find-package "CL-WEAVE")) :reporter :spec)
                (error "cl-cc-codegen-native test suite failed."))))

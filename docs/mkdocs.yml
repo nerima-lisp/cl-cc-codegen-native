@@ -1,0 +1,127 @@
+# cl-cc-codegen-native documentation — MkDocs + Material configuration.
+#
+# Build:   mkdocs build --strict --config-file docs/mkdocs.yml
+# Serve:   mkdocs serve --config-file docs/mkdocs.yml
+#
+# Invoke from the REPOSITORY ROOT, not from docs/. `nix build .#docs` drives
+# the same config offline.
+
+site_name: cl-cc-codegen-native
+site_description: >-
+  Native code generation for the cl-cc Common Lisp compiler: register
+  allocation, instruction selection, encoding and object emission.
+site_author: nerima-lisp
+site_url: https://nerima-lisp.github.io/cl-cc-codegen-native/
+
+repo_name: nerima-lisp/cl-cc-codegen-native
+repo_url: https://github.com/nerima-lisp/cl-cc-codegen-native
+edit_uri: edit/main/docs/src/
+
+docs_dir: src
+site_dir: ../site
+use_directory_urls: true
+
+copyright: Copyright &copy; takeokunn — MIT License
+
+# Also passed as --strict by packages.docs. Writing it here as well means
+# `mkdocs serve` applies the same gate, so there is no invocation path that
+# silently tolerates a broken link. Use `mkdocs serve --no-strict` while
+# editing if that is in the way.
+strict: true
+
+theme:
+  name: material
+  language: en
+  favicon: assets/favicon.svg
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/sitemap-outline
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/nerima-lisp/cl-cc-codegen-native
+      name: cl-cc-codegen-native on GitHub
+  generator: false
+
+# search only: every additional plugin has to be available inside the Nix
+# sandbox that builds packages.docs.
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.keys
+  - pymdownx.smartsymbols
+  - attr_list
+  - md_in_html
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+      title: On this page
+
+# Five-section order from DOCS_STANDARD.md, minus the sections that have no
+# pages yet. Reference holds a single page, so it is a plain entry rather than
+# a section: the standard collapses any section down to a single entry when it
+# would otherwise hold exactly one page.
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Reference: reference/api.md
+
+not_in_nav: |
+  notes/

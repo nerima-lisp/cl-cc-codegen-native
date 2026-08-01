@@ -241,6 +241,10 @@ compile."
 
 (defmethod emit-instruction ((target x86-64-target) (inst vm-jump) stream)
   (format stream "  jmp ~A~%" (vm-label-name inst)))
+(defmethod emit-instruction ((target x86-64-target) (inst vm-func-ref) stream)
+  (format stream "  lea ~A, [rel ~A]~%"
+          (target-register target (vm-dst inst))
+          (vm-label-name inst)))
 
 (defmethod emit-instruction ((target x86-64-target) (inst vm-jump-zero) stream)
   (format stream "  cmp ~A, 0~%"

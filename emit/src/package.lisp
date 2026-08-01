@@ -42,6 +42,7 @@
     #:*command-line-args* #:*default-external-format*
     #:read-preserving-whitespace #:read-delimited-list
     #:set-syntax-from-char
+    #:vm-simd-vector-op-p
 )
   (:export
    ;; Re-export regalloc + emit symbols ---

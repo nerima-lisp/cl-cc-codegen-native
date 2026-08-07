@@ -5455,6 +5455,44 @@ only owns the accumulation."
     (expect (cl-cc/codegen::%mir-dst-name (cl-cc/mir:make-mir-inst :dst nil))
             :to-be nil)))
 
+(describe-sequential "isel-core.lisp: mir-module->vm-program phi accumulation order"
+  (it "preserves phi move order across multiple RPO blocks"
+    (let* ((fn (cl-cc/mir:mir-make-function :phi-order))
+           (entry (cl-cc/mir:mirf-entry fn))
+           (middle (cl-cc/mir:mir-new-block fn :label :middle))
+           (exit (cl-cc/mir:mir-new-block fn :label :exit))
+           (middle-phi
+             (cl-cc/mir:make-mir-inst
+              :op :phi
+              :dst (cl-cc/mir:make-mir-value :name :middle-dst)
+              :srcs (list
+                     (cons entry
+                           (cl-cc/mir:make-mir-value :name :middle-src)))))
+           (exit-phi
+             (cl-cc/mir:make-mir-inst
+              :op :phi
+              :dst (cl-cc/mir:make-mir-value :name :exit-dst)
+              :srcs (list
+                     (cons middle
+                           (cl-cc/mir:make-mir-value :name :exit-src)))))
+           (module (cl-cc/mir:make-mir-module :functions (list fn))))
+      (cl-cc/mir:mir-add-succ entry middle)
+      (cl-cc/mir:mir-add-succ middle exit)
+      (setf (cl-cc/mir:mirb-phis middle) (list middle-phi)
+            (cl-cc/mir:mirb-phis exit) (list exit-phi))
+      (let* ((program
+               (cl-cc/codegen::mir-module->vm-program
+                module
+                (cl-cc/vm:make-vm-program)))
+             (moves (cl-cc/vm:vm-program-instructions program)))
+        (expect (mapcar (lambda (inst)
+                          (list (cl-cc/vm:vm-dst inst)
+                                (cl-cc/vm:vm-src inst)))
+                        moves)
+                :to-equal
+                (list (list :exit-dst :exit-src)
+                      (list :middle-dst :middle-src)))))))
+
 (describe-sequential "isel-core.lisp: optimize-mir-module-for-isel (constant folding + CSE)"
   (it "folds a constant + constant add into :const, and CSE-rewrites a repeated non-constant add into :move"
     ;; r0=3, r1=4, r2=r0+r1 (both const -> folds to (:const 7)),

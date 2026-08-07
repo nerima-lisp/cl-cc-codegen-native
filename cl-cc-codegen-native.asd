@@ -55,5 +55,5 @@
              ;; be a read-time PACKAGE-DOES-NOT-EXIST error regardless of
              ;; what the system depends on. FIND-SYMBOL/FIND-PACKAGE/FUNCALL
              ;; are CL, always present.
-             (unless (funcall (find-symbol "RUN-ALL" (find-package "CL-WEAVE")) :reporter :spec)
+             (unless (funcall (find-symbol "RUN-ALL" (find-package "CL-WEAVE")) :reporter :spec :pass-with-no-tests nil)
                (error "cl-cc-codegen-native test suite failed."))))

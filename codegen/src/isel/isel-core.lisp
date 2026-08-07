@@ -369,7 +369,7 @@ handling remains deferred to the current register allocator."
   (let ((instructions '()))
     (dolist (fn (mirm-functions module))
       (dolist (block (mir-rpo fn))
-        (setf instructions (append instructions (%lower-phis-to-vm-moves block)))
+        (setf instructions (nconc instructions (%lower-phis-to-vm-moves block)))
         (dolist (inst (mirb-insts block))
           (let ((vm-inst (%emit-selected-vm-inst inst target)))
             (when vm-inst (push vm-inst instructions))))))

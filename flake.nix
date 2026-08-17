@@ -56,11 +56,11 @@
       flake = false;
     };
     cl-cc-optimize = {
-      url = "github:nerima-lisp/cl-cc-optimize/9f0587ea9211ea4d234b045cfb8d71a1fb40bab4";
+      url = "github:nerima-lisp/cl-cc-optimize/51c0db63ff125413568ec08c79e33dcf34f00fbf";
       flake = false;
     };
-    cl-prolog = {
-      url = "github:nerima-lisp/cl-prolog/c0b22e98b0ac54f94e0949ed1e2b347f36a78635";
+    cl-prolog-kit = {
+      url = "github:nerima-lisp/cl-prolog-kit/v1.5.0";
       flake = false;
     };
     cl-parser-kit = {
@@ -150,7 +150,7 @@
       cl-cc-mir,
       cl-cc-binary,
       cl-cc-optimize,
-      cl-prolog,
+      cl-prolog-kit,
       cl-parser-kit,
       cl-log-kit,
       cl-date-kit,
@@ -185,7 +185,7 @@
       # CL_SOURCE_REGISTRY for the test, coverage and dev environments.
       # cl-cc-mir's own source tree also provides cl-cc-target (folded in
       # 2026-08-01), so one ${cl-cc-mir}//: entry resolves both systems.
-      sourceRegistry = "${cl-weave}//:${cl-cc-ast}//:${cl-cc-type}//:${cl-cc-bootstrap}//:${cl-cc-runtime}//:${cl-cc-vm}//:${cl-cc-mir}//:${cl-cc-binary}//:${cl-cc-optimize}//:${cl-prolog}//:${cl-parser-kit}//:${cl-log-kit}//:${cl-date-kit}//:${cl-concurrent-kit}//:${cl-host-kit}//:${cl-regex-kit}//:${cl-tty-kit}//:${cl-process-kit}//:${cl-json-kit}//:${cl-boundary-kit}//:${self}//";
+      sourceRegistry = "${cl-weave}//:${cl-cc-ast}//:${cl-cc-type}//:${cl-cc-bootstrap}//:${cl-cc-runtime}//:${cl-cc-vm}//:${cl-cc-mir}//:${cl-cc-binary}//:${cl-cc-optimize}//:${cl-prolog-kit}//:${cl-parser-kit}//:${cl-log-kit}//:${cl-date-kit}//:${cl-concurrent-kit}//:${cl-host-kit}//:${cl-regex-kit}//:${cl-tty-kit}//:${cl-process-kit}//:${cl-json-kit}//:${cl-boundary-kit}//:${self}//";
 
       # Single source of truth for the package version: the `:version` form in
       # cl-cc-codegen-native.asd. A release only ever edits the .asd file and every Nix

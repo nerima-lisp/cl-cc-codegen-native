@@ -2942,7 +2942,7 @@ only owns the accumulation."
 
 (describe-sequential "x86-64-eh.lisp: x86-64-eh-condition-matches-p"
   (it "signals when HANDLER-TYPE is not a valid condition type"
-    (signals type-error
+    (signals error
       (cl-cc/codegen:x86-64-eh-condition-matches-p
        (make-condition 'simple-error :format-control "boom")
        'not-a-condition-type)))

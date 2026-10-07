@@ -130,7 +130,8 @@ region, so this helper mirrors the runtime personality lookup in Lisp for tests
 and for metadata generation sanity checks."
   (let ((ip (- absolute-ip region-start)))
     (find-if (lambda (lp)
-               (and (<= (x86-64-landing-pad-start-address lp) ip)
+               (and (not (eq (x86-64-landing-pad-kind lp) :restart))
+                    (<= (x86-64-landing-pad-start-address lp) ip)
                     (< ip (x86-64-landing-pad-end-address lp))
                     (x86-64-eh-condition-matches-p
                      exception (x86-64-landing-pad-handler-type lp))))

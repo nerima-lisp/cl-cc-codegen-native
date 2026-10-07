@@ -2942,10 +2942,21 @@ only owns the accumulation."
 
 (describe-sequential "x86-64-eh.lisp: x86-64-eh-condition-matches-p"
   (it "signals when HANDLER-TYPE is not a valid condition type"
-    (signals error
+    (signals type-error
       (cl-cc/codegen:x86-64-eh-condition-matches-p
        (make-condition 'simple-error :format-control "boom")
-       'not-a-condition-type))))
+       'not-a-condition-type)))
+  (it "does not treat restart names as condition types"
+    (expect
+     (cl-cc/codegen::x86-64-find-landing-pad
+      (list (cl-cc/codegen::make-x86-64-landing-pad
+             :start-address 0
+             :end-address 10
+             :handler-type :abort
+             :kind :restart))
+      1
+      (make-condition 'simple-error :format-control "boom"))
+     :to-be-null))
 
 (describe-sequential "x86-64-eh.lisp: x86-64-table-eh-enabled-p"
   ;; Both defaults verified directly against their own DEFPARAMETER forms:

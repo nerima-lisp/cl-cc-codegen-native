@@ -118,8 +118,7 @@ condition classes participate in normal CLOS condition dispatch."
   (cond
     ((or (eq handler-type t) (eq handler-type 'condition)) t)
     ((or (symbolp handler-type) (typep handler-type 'class))
-     (handler-case (typep exception handler-type)
-       (error () nil)))
+     (typep exception handler-type))
     (t nil)))
 
 (defun x86-64-find-landing-pad (landing-pads absolute-ip exception &key (region-start 0))

@@ -2010,6 +2010,11 @@ only owns the accumulation."
              '(:a (:b . :a) :c))
             :to-equal '(:z (:b . :z) :c))))
 
+(describe-sequential "regalloc-spill.lisp: %regalloc-rewrite-inst"
+  (it "signals when an instruction cannot be serialized for rewriting"
+    (signals error
+      (cl-cc/regalloc::%regalloc-rewrite-inst nil (make-hash-table :test #'eq)))))
+
 (describe-sequential "regalloc-spill.lisp: %split-vreg-at-position"
   (it "returns the vreg of whichever child interval covers POSITION"
     (let ((children (list (cl-cc/regalloc::make-live-interval :vreg :a :start 0 :end 5)
@@ -2934,6 +2939,13 @@ only owns the accumulation."
     (signals error (cl-cc/codegen:normalize-x86-64-eh-model "bogus")))
   (it "signals an error for a value that is neither NIL, a known keyword, nor a string"
     (signals error (cl-cc/codegen:normalize-x86-64-eh-model 42))))
+
+(describe-sequential "x86-64-eh.lisp: x86-64-eh-condition-matches-p"
+  (it "signals when HANDLER-TYPE is not a valid condition type"
+    (signals error
+      (cl-cc/codegen:x86-64-eh-condition-matches-p
+       (make-condition 'simple-error :format-control "boom")
+       'not-a-condition-type))))
 
 (describe-sequential "x86-64-eh.lisp: x86-64-table-eh-enabled-p"
   ;; Both defaults verified directly against their own DEFPARAMETER forms:

@@ -2954,9 +2954,9 @@ only owns the accumulation."
              :end-address 10
              :handler-type :abort
              :kind :restart))
-      1
+     1
       (make-condition 'simple-error :format-control "boom"))
-     :to-be-null))
+     :to-be-null)))
 
 (describe-sequential "x86-64-eh.lisp: x86-64-table-eh-enabled-p"
   ;; Both defaults verified directly against their own DEFPARAMETER forms:

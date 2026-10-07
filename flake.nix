@@ -64,7 +64,7 @@
       flake = false;
     };
     cl-parser-kit = {
-      url = "github:nerima-lisp/cl-parser-kit/v1.0.2";
+      url = "github:nerima-lisp/cl-parser-kit/v1.1.1";
       flake = false;
     };
     # v2.0.0's own dependency chain is cl-date-kit, cl-concurrent-kit and
@@ -73,41 +73,45 @@
     # advance, so this is exactly the source registry v2.0.0 actually needs
     # and no more.
     cl-log-kit = {
-      url = "github:nerima-lisp/cl-log-kit/v2.0.0";
+      url = "github:nerima-lisp/cl-log-kit/v2.2.0";
       flake = false;
     };
     cl-process-kit = {
-      url = "github:nerima-lisp/cl-process-kit/v2.0.0";
+      url = "github:nerima-lisp/cl-process-kit/v3.4.0";
+      flake = false;
+    };
+    cl-codec-kit = {
+      url = "github:nerima-lisp/cl-codec-kit/v0.6.0";
       flake = false;
     };
     cl-json-kit = {
-      url = "github:nerima-lisp/cl-json-kit/v1.0.1";
+      url = "github:nerima-lisp/cl-json-kit/v1.2.0";
       flake = false;
     };
     cl-boundary-kit = {
-      url = "github:nerima-lisp/cl-boundary-kit/v1.0.0";
+      url = "github:nerima-lisp/cl-boundary-kit/v2.3.0";
       flake = false;
     };
     # cl-log-kit v2.0.0's own dependencies, needed for it to resolve through
     # this repository's source registry.
     cl-date-kit = {
-      url = "github:nerima-lisp/cl-date-kit/v0.2.0";
+      url = "github:nerima-lisp/cl-date-kit/v1.1.1";
       flake = false;
     };
     cl-concurrent-kit = {
-      url = "github:nerima-lisp/cl-concurrent-kit/v0.1.0";
+      url = "github:nerima-lisp/cl-concurrent-kit/v0.6.1";
       flake = false;
     };
     cl-host-kit = {
-      url = "github:nerima-lisp/cl-host-kit/v0.2.1";
+      url = "github:nerima-lisp/cl-host-kit/v0.3.1";
       flake = false;
     };
     cl-regex-kit = {
-      url = "github:nerima-lisp/cl-regex-kit/d7d1a0e4d5a15765b1f781993949ae2e3cb796f9";
+      url = "github:nerima-lisp/cl-regex-kit/v2.2.0";
       flake = false;
     };
     cl-tty-kit = {
-      url = "github:nerima-lisp/cl-tty-kit/v1.0.3";
+      url = "github:nerima-lisp/cl-tty-kit/v1.6.1";
       flake = false;
     };
     # Pinned to a release tag. A bare `github:nerima-lisp/cl-weave` follows
@@ -117,7 +121,7 @@
     # variable; it is a normal flake input now, which is what lets ASDF find
     # cl-weave through CL_SOURCE_REGISTRY like any other dependency.
     cl-weave = {
-      url = "github:nerima-lisp/cl-weave/v1.1.0";
+      url = "github:nerima-lisp/cl-weave/v1.4.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -127,7 +131,7 @@
     # over every .lisp/.asd file, independent of and much cheaper than
     # actually compiling them.
     paredit-cli = {
-      url = "github:nerima-lisp/paredit-cli/v1.3.0";
+      url = "github:nerima-lisp/paredit-cli/v1.6.3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -159,6 +163,7 @@
       cl-regex-kit,
       cl-tty-kit,
       cl-process-kit,
+      cl-codec-kit,
       cl-json-kit,
       cl-boundary-kit,
       paredit-cli,
@@ -185,7 +190,7 @@
       # CL_SOURCE_REGISTRY for the test, coverage and dev environments.
       # cl-cc-mir's own source tree also provides cl-cc-target (folded in
       # 2026-08-01), so one ${cl-cc-mir}//: entry resolves both systems.
-      sourceRegistry = "${cl-weave}//:${cl-cc-ast}//:${cl-cc-type}//:${cl-cc-bootstrap}//:${cl-cc-runtime}//:${cl-cc-vm}//:${cl-cc-mir}//:${cl-cc-binary}//:${cl-cc-optimize}//:${cl-prolog-kit}//:${cl-parser-kit}//:${cl-log-kit}//:${cl-date-kit}//:${cl-concurrent-kit}//:${cl-host-kit}//:${cl-regex-kit}//:${cl-tty-kit}//:${cl-process-kit}//:${cl-json-kit}//:${cl-boundary-kit}//:${self}//";
+      sourceRegistry = "${cl-weave}//:${cl-cc-ast}//:${cl-cc-type}//:${cl-cc-bootstrap}//:${cl-cc-runtime}//:${cl-cc-vm}//:${cl-cc-mir}//:${cl-cc-binary}//:${cl-cc-optimize}//:${cl-prolog-kit}//:${cl-parser-kit}//:${cl-log-kit}//:${cl-date-kit}//:${cl-concurrent-kit}//:${cl-host-kit}//:${cl-regex-kit}//:${cl-tty-kit}//:${cl-process-kit}//:${cl-codec-kit}//:${cl-json-kit}//:${cl-boundary-kit}//:${self}//";
 
       # Single source of truth for the package version: the `:version` form in
       # cl-cc-codegen-native.asd. A release only ever edits the .asd file and every Nix

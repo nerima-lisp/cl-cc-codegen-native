@@ -143,7 +143,7 @@ float-vreg map updated with split children."
                            :slot (vm-spill-slot inst)))
       (t
        (sexp->instruction
-        (%regalloc-map-tree #'rewrite-reg (instruction->sexp inst))))))
+        (%regalloc-map-tree #'rewrite-reg (instruction->sexp inst)))))))
 
 (defun %regalloc-rewrite-inst-dst (inst dst)
   "Return INST cloned with its single destination rewritten to DST."

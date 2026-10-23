@@ -6134,13 +6134,13 @@ only owns the accumulation."
 
   (it "x86-64 rejects EH sites whose handler label is unresolved"
     (let* ((cl-cc/codegen::*x86-64-shadow-stack-enabled* t)
-           (inst (cl-cc/vm:make-vm-push-handler
-                  :handler-type 'condition :handler-label "missing" :result-reg :r0)))
+           (inst (cl-cc/vm:make-vm-establish-handler
+                  :handler-label "missing" :result-reg :r0 :error-type (quote error))))
       (expect (%codegen-error-names-p
                (lambda ()
                  (cl-cc/codegen::x86-64-build-landing-pad-table
-                  (list inst) (make-hash-table :test 'equal) 0))
-               "VM-PUSH-HANDLER")
+                  (list inst) (make-hash-table :test (quote equal)) 0))
+               "VM-ESTABLISH-HANDLER")
               :to-be-truthy)))
 
   (it "x86-64 rejects missing instruction-size entries by name"

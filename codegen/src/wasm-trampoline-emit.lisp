@@ -217,8 +217,8 @@ tree emission on NIL."
     (vm-jump-zero
      (let ((pc-idx (gethash (vm-label-name inst) label-pc-map)))
        (unless pc-idx
-         (format stream "~%      ;; WARNING: unknown label ~S in jump-zero"
-                 (vm-label-name inst)))
+         (error "WASM VM-JUMP-ZERO references unknown label ~S"
+                (vm-label-name inst)))
        (format stream
                "~%      (if (ref.is_null ~A)~%        (then (local.set ~D (i32.const ~D)) (br $dispatch)))"
                (reg-local-ref reg-map (vm-reg inst))
@@ -288,29 +288,30 @@ tree emission on NIL."
       (reg-record-type reg-map (vm-dst inst) :cons)
       t)
      (vm-closure
-      (let* ((label (vm-label-name inst))
-              (table-idx (if (and *wasm-label-to-table-idx* label)
-                             (gethash label *wasm-label-to-table-idx* 0)
-                             0)))
+     (let* ((label (vm-label-name inst))
+            (table-idx (and *wasm-label-to-table-idx* label
+                            (gethash label *wasm-label-to-table-idx*))))
+       (unless (integerp table-idx)
+         (error "Unsupported WASM instruction: VM-CLOSURE has no function-table entry for ~S"
+                label))
        (format stream "~%      ;; struct.new typeidx ~D; array.new typeidx ~D"
                +type-idx-closure+ +type-idx-eqref-array+)
-        (emit-wasm-closure-allocation reg-map (vm-dst inst) table-idx
-                                      (vm-captured-vars inst) stream 6)
-        t))
+       (emit-wasm-closure-allocation reg-map (vm-dst inst) table-idx
+                                     (vm-captured-vars inst) stream 6)
+       t))
     (vm-func-ref
      (let* ((label (vm-label-name inst))
-            (table-idx (if (and *wasm-label-to-table-idx* label)
-                           (gethash label *wasm-label-to-table-idx* 0)
-                           0)))
+            (table-idx (and *wasm-label-to-table-idx* label
+                            (gethash label *wasm-label-to-table-idx*))))
+       (unless (integerp table-idx)
+         (error "Unsupported WASM instruction: VM-FUNC-REF has no function-table entry for ~S"
+                label))
        (format stream "~%      ;; struct.new typeidx ~D; funcidx ~D"
                +type-idx-closure+ table-idx)
        (emit-wasm-closure-allocation reg-map (vm-dst inst) table-idx nil stream 6)
        t))
     (vm-register-function
-     (format stream "~%      ;; register-function ~S from local ~D (module table already populated)"
-             (vm-func-name inst)
-             (wasm-reg-to-local reg-map (vm-src inst)))
-     t)
+     (error "Unsupported WASM instruction: VM-REGISTER-FUNCTION"))
      (vm-closure-ref-idx
      (format stream "~%      ~A"
              (reg-local-set reg-map (vm-dst inst)
@@ -319,8 +320,18 @@ tree emission on NIL."
                                                   (vm-closure-index inst))))
       t)
     (vm-make-array
-     (let* ((kind (if (and *wasm-gc-array-types-enabled*
-                           (not (vm-element-type-reg inst)))
+     (when (or (vm-dimensions-reg inst)
+               (vm-fill-pointer inst)
+               (vm-fill-pointer-reg inst)
+               (vm-adjustable inst)
+               (vm-adjustable-reg inst)
+               (vm-element-type-reg inst)
+               (vm-displaced-to-reg inst)
+               (vm-displaced-index-offset-reg inst)
+               (vm-copy-on-write inst)
+               (vm-copy-on-write-reg inst))
+       (error "Unsupported WASM VM-MAKE-ARRAY options: ~S" inst))
+     (let* ((kind (if *wasm-gc-array-types-enabled*
                       (wasm-normalize-array-element-kind (vm-element-type inst))
                       :eqref))
             (init (if (vm-initial-element inst)

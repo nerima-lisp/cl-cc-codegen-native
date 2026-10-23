@@ -459,20 +459,17 @@
     (emit-riscv32 (encode-rv-beq rs +rv-zero+ offset) stream)))
 
 (defun emit-riscv64-vm-select (inst stream)
-  "Emit select; use Zicond when enabled, otherwise preserve existing placeholder."
+  "Emit VM-SELECT using Zicond, or signal an error when it is disabled."
+  (unless *riscv64-zicond-enabled*
+    (error "Unsupported RISC-V instruction: VM-SELECT requires Zicond"))
   (let ((rd (riscv64-reg (vm-dst inst)))
         (cond-reg (riscv64-reg (vm-select-cond-reg inst)))
         (then (riscv64-reg (vm-select-then-reg inst)))
         (else (riscv64-reg (vm-select-else-reg inst))))
-    (declare (ignorable cond-reg else))
-    (if *riscv64-zicond-enabled*
-        (progn
-          ;; rd = (cond != 0) ? then : else
-          (emit-riscv32 (encode-rv-czero-eqz +rv-t0+ then cond-reg) stream)
-          (emit-riscv32 (encode-rv-czero-nez rd else cond-reg) stream)
-          (emit-riscv32 (encode-rv-or rd rd +rv-t0+) stream))
-        (progn
-          (emit-riscv32 (encode-rv-addi rd then 0) stream)))))
+    ;; rd = (cond != 0) ? then : else
+    (emit-riscv32 (encode-rv-czero-eqz +rv-t0+ then cond-reg) stream)
+    (emit-riscv32 (encode-rv-czero-nez rd else cond-reg) stream)
+    (emit-riscv32 (encode-rv-or rd rd +rv-t0+) stream)))
 
 (defparameter *riscv64-emitter-table*
   (let ((ht (make-hash-table :test #'eq)))
@@ -501,10 +498,22 @@
 
 (defun riscv64-instruction-size (inst)
   "Return encoded byte size of INST for conservative fixed-width layout."
-  (case (type-of inst)
-    ((vm-label vm-print vm-closure vm-register-function vm-set-global) 0)
-    (vm-select (if *riscv64-zicond-enabled* 12 4))
-    (otherwise 4)))
+  (let ((tp (type-of inst)))
+    (case tp
+      (vm-label 0)
+      (vm-const
+       (progn
+         (vm-const-to-integer (vm-value inst))
+         4))
+      (vm-select
+       (if *riscv64-zicond-enabled*
+           12
+           (error "Unsupported RISC-V instruction: VM-SELECT requires Zicond")))
+      ((vm-jump vm-jump-zero vm-call vm-tail-call) 4)
+      (otherwise
+       (if (gethash tp *riscv64-emitter-table*)
+           4
+           (error "Unsupported RISC-V instruction: ~A" tp))))))
 
 (defun build-riscv64-label-offsets (instructions prologue-size)
   "Build label-name to byte-offset table for RISC-V emission."
@@ -519,7 +528,7 @@
   "Emit RISC-V machine code for one VM instruction."
   (let ((tp (type-of inst)))
     (cond
-      ((member tp '(vm-label vm-print vm-closure vm-register-function vm-set-global) :test #'eq)
+      ((member tp '(vm-label) :test #'eq)
        nil)
       ((eq tp 'vm-jump)
        (emit-riscv64-vm-jump inst stream current-pos label-offsets))

@@ -196,7 +196,7 @@ through extracted standalone functions."
       (vm-name inst))))
 
 (defun %wasm-function-local-exception-table (full-instructions body-instructions exception-table)
-  "Project PROGRAM's exception table onto BODY-INSTRUCTIONS using local PCs."
+  "Project exception rows onto BODY-INSTRUCTIONS using local PCs."
   (let ((local-index (%wasm-instruction-pc-index body-instructions))
         (entries nil))
     (when exception-table
@@ -210,14 +210,17 @@ through extracted standalone functions."
             for handler-label = (%wasm-label-at-pc
                                  full-instructions
                                  (cl-cc/vm:vm-exception-entry-handler-pc entry))
-            when (and start-local end-local handler-label)
-              do (push (list :kind :handler
+            do (when (and start-local end-local (not handler-label))
+                 (error "Unsupported WASM instruction: VM-ESTABLISH-HANDLER exception table has no handler label at PC ~D"
+                        (cl-cc/vm:vm-exception-entry-handler-pc entry)))
+               (when (and start-local end-local handler-label)
+                 (push (list :kind :handler
                              :start-pc start-local
                              :end-pc (1+ end-local)
                              :handler-label handler-label
                              :result-reg (cl-cc/vm:vm-exception-entry-result-reg entry)
                              :condition-type (cl-cc/vm:vm-exception-entry-condition-type entry))
-                       entries)))
+                       entries))))
     (nreverse entries)))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────

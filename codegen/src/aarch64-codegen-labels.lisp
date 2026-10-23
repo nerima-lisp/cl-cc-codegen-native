@@ -99,11 +99,8 @@
     (setf (gethash 'vm-select ht) 12)       ; encode-mov-rr + encode-cmp + encode-csel
     (setf (gethash 'vm-bswap ht) 4)         ; encode-rev32
     (setf (gethash 'vm-rotate ht) 8)        ; MOV + RORV
+    (setf (gethash 'cl-cc/optimize::opt-vm-path-profile-record ht) 0)
     (setf (gethash 'vm-label ht) 0)         ; no code
-    (setf (gethash 'vm-closure ht) 0)       ; top-level/native scaffolding only
-    (setf (gethash 'vm-type-check ht) 0)
-    (setf (gethash 'vm-register-function ht) 0)
-    (setf (gethash 'vm-set-global ht) 0)
     (setf (gethash 'vm-jump ht) 4)          ; encode-b
     (setf (gethash 'vm-jump-zero ht) 4)     ; encode-cbz
     (setf (gethash 'vm-halt ht) 4)          ; encode-mov-rr
@@ -122,7 +119,6 @@
     (setf (gethash 'vm-memory-barrier ht) 4)
     (setf (gethash 'vm-load-fence ht) 4)
     (setf (gethash 'vm-store-fence ht) 4)
-    (setf (gethash 'vm-print ht) 0)
     ht)
   "Maps VM instruction type symbols to their AArch64 encoded byte sizes.")
 
@@ -135,10 +131,7 @@
        (cond
        ((eq tp 'vm-const)
         (let ((value (logand (let ((v (vm-value inst)))
-                               (cond ((integerp v) v)
-                                     ((null v) 0)
-                                     ((eq v t) 1)
-                                     (t 0)))
+                               (vm-const-to-integer v))
                              #xFFFFFFFFFFFFFFFF)))
           (if (a64-literal-pool-value-p value)
              8
@@ -155,7 +148,8 @@
          (a64-validate-simd-vector-op inst)
          40)
       (t
-        (or (gethash tp *a64-instruction-sizes*) 0)))))))
+       (or (gethash tp *a64-instruction-sizes*)
+            (error "Unsupported AArch64 instruction: ~A" tp))))))))
 
 ;;; Label offset table builder
 

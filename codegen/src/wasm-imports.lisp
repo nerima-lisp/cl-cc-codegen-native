@@ -17,7 +17,7 @@
   (wasm-feature-enabled-p "CLCC_WASM_AOT" *wasm-aot-mode-enabled*))
 
 (defun %wasm-import-needed-p (name)
-  "Return T when host import NAME should be emitted."
+  "Return T when host import NAME is used or cannot be ruled out."
   (or (not *wasm-dead-import-elimination-enabled*)
       (null *wasm-aot-current-used-imports*)
       (gethash name *wasm-aot-current-used-imports*)))
@@ -26,7 +26,7 @@
   (and (stringp string) (search needle string :test #'char=)))
 
 (defun wasm-module-used-host-imports (module)
-  "Build a best-effort dependency graph of host bridge functions used by MODULE."
+  "Return the best-effort set of host imports used by MODULE."
   (let ((used (make-hash-table :test #'equal)))
     (labels ((mark (name) (setf (gethash name used) t))
              (scan-string (text)
@@ -39,7 +39,8 @@
                                 ("$host_rt_call_generic" . "call_generic")
                                 ("$cl_condition_to_exnref" . "condition_to_exnref")
                                 ("$cl_exnref_payload" . "exnref_payload")
-                                ("$cl_exnref_tag" . "exnref_tag")))
+                                ("$cl_exnref_tag" . "exnref_tag")
+                                ("$js_host_object" . "js_host_object")))
                  (when (%wasm-call-string-mentions-p (car entry) text)
                    (mark (cdr entry))))))
       (dolist (func (wasm-module-functions module))
@@ -61,28 +62,31 @@
             (gethash "exnref_tag" used) t))
     used))
 
-(defun emit-wat-aot-host-stubs (stream)
-  "Emit no-op host bridge stubs so AOT modules are self-contained."
-  (format stream "~%  ;; FR-219: AOT host bridge stubs (no mandatory JS imports)")
-  (when (%wasm-import-needed-p "write_char")
-    (format stream "~%  (func $host_write_char (param i32))"))
-  (when (%wasm-import-needed-p "read_char")
-    (format stream "~%  (func $host_read_char (result i32) (i32.const -1))"))
-  (when (%wasm-import-needed-p "write_string")
-    (format stream "~%  (func $host_write_string (param (ref $string_t)))"))
-  (when (%wasm-import-needed-p "error")
-    (format stream "~%  (func $host_error (param (ref $string_t)))"))
-  (when (%wasm-import-needed-p "print_val")
-    (format stream "~%  (func $host_print_val (param eqref))"))
-  (when (%wasm-import-needed-p "register_method")
-    (format stream "~%  (func $host_rt_register_method (param eqref) (param eqref) (param eqref) (param eqref))"))
-  (when (%wasm-import-needed-p "call_generic")
-    (format stream "~%  (func $host_rt_call_generic (param eqref) (param i32) (result eqref) (ref.null eq))")))
+(defun reject-unimplemented-aot-host-bridges ()
+  "Signal when AOT output needs a host bridge without an implementation."
+  (labels ((bridge-label (name)
+             (cond
+               ((string= name "print_val") "VM-PRINT")
+               ((string= name "register_method") "VM-REGISTER-METHOD")
+               ((string= name "call_generic") "VM-GENERIC-CALL")
+               ((string= name "condition-tag") "$cl_condition_tag")
+               ((member name '("condition_to_exnref" "exnref_payload" "exnref_tag")
+                        :test #'string=)
+                (format nil "$cl_~A" name))
+               ((string= name "js_host_object") "$js_host_object")
+               (t (format nil "$host_~A" name)))))
+    (dolist (name (list "write_char" "read_char" "write_string" "error"
+                        "print_val" "register_method" "call_generic"
+                        "condition-tag" "condition_to_exnref" "exnref_payload"
+                        "exnref_tag" "js_host_object"))
+      (when (%wasm-import-needed-p name)
+        (error "Unsupported WASM AOT host import: ~A"
+               (bridge-label name))))))
 
 (defun emit-wat-imports (stream)
-  "Emit standard cl-cc I/O imports."
+  "Emit host imports, or reject unavailable AOT bridges."
   (if (%wasm-aot-mode-active-p)
-      (emit-wat-aot-host-stubs stream)
+      (reject-unimplemented-aot-host-bridges)
       (progn
   (format stream "~%  ;; Host I/O imports")
   (when (and (wasm-import-cl-condition-tag-enabled-p)

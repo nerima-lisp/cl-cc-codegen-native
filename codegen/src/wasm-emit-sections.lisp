@@ -415,11 +415,8 @@ This is a conservative MOP-aware approximation for slot index lowering."
         (push-unique s))
       (nreverse result))))
 
-(defun wasm-slot-index-for-object-slot (target obj-reg slot-name)
-  "Resolve SLOT-NAME index using object->class->slot layout when available.
-
-Falls back to the global known-slot-indexes table. Signals an error when
-neither layout records SLOT-NAME."
+(defun wasm-slot-index-for-object-slot (target obj-reg slot-name &optional inst)
+  "Resolve SLOT-NAME using object or shared slot metadata."
   (let* ((class-name (gethash obj-reg (wasm-target-known-object-class-by-reg target)))
          (layout (and class-name
                       (gethash class-name (wasm-target-class-slot-layouts target)))))
@@ -427,12 +424,17 @@ neither layout records SLOT-NAME."
       (multiple-value-bind (index presentp) (gethash slot-name layout)
         (when presentp
           (return-from wasm-slot-index-for-object-slot index))))
-    (wasm-slot-index-for target slot-name)))
+    (multiple-value-bind (index presentp)
+        (gethash slot-name (wasm-target-known-slot-indexes target))
+      (cond
+        (presentp index)
+        (inst
+         (error "Unsupported WASM instruction: ~A has no slot index for ~S"
+                (type-of inst) slot-name))
+        (t (error "No Wasm slot index is recorded for ~S." slot-name))))))
 
 (defun wasm-slot-index-for (target slot-name)
-  "Lookup slot index for SLOT-NAME recorded by prior vm-class-def emission.
-
-Signals an error when SLOT-NAME has no recorded layout."
+  "Resolve SLOT-NAME in the shared slot metadata table."
   (multiple-value-bind (index presentp)
       (gethash slot-name (wasm-target-known-slot-indexes target))
     (if presentp
@@ -440,68 +442,23 @@ Signals an error when SLOT-NAME has no recorded layout."
         (error "No Wasm slot index is recorded for ~S." slot-name))))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-class-def) stream)
-  "Record class slot layout metadata for downstream slot lowering.
-
-Wasm backend records static slot ordering and materializes a staged
-$class_meta_t object for DST." 
-  (let ((reg-map (wasm-target-reg-map target)))
-    (let* ((effective-order (wasm-build-effective-slot-order
-                             target
-                             (vm-class-name-sym inst)
-                             (or (vm-superclasses inst) nil)
-                             (or (vm-slot-names inst) nil)))
-            (slot-count (length effective-order)))
-      (wasm-record-class-slot-layout! target effective-order)
-      (wasm-record-class-slot-layout-for-class! target (vm-class-name-sym inst) effective-order)
-      (setf (gethash (vm-dst inst) (wasm-target-known-class-by-reg target))
-            (vm-class-name-sym inst))
-      (format stream "~%    ~A"
-              (reg-local-set
-               reg-map
-               (vm-dst inst)
-               (format nil
-                        "(struct.new $class_meta_t ~
- (struct.new $symbol_t (struct.new $string_t (array.new $bytes_array_t (i32.const 0) (i32.const 0))) (ref.null eq)) ~
- (array.new $eqref_array_t (ref.null eq) (i32.const ~D)) ~
- (struct.new $symbol_t (struct.new $string_t (array.new $bytes_array_t (i32.const 0) (i32.const 0))) (ref.null eq)) ~
- (array.new $eqref_array_t (ref.null eq) (i32.const 0)))"
-                        slot-count))))))
+  (declare (ignore target stream))
+  (error "Unsupported WASM instruction: ~A" (type-of inst)))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-find-class) stream)
-  "Track class-reg provenance for downstream vm-make-obj lowering." 
-  (let* ((reg-map (wasm-target-reg-map target))
-         (src-reg (vm-src inst))
-         (class-name (or (gethash src-reg (wasm-target-known-class-by-reg target))
-                         src-reg)))
-    (setf (gethash (vm-dst inst) (wasm-target-known-class-by-reg target)) class-name)
-    (format stream "~%    ~A"
-            (reg-local-set reg-map (vm-dst inst) (reg-local-ref reg-map src-reg)))))
+  (declare (ignore target stream))
+  (error "Unsupported WASM instruction: ~A" (type-of inst)))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-make-obj) stream)
-  "Emit staged instance allocation and track object register class provenance." 
-  (let* ((reg-map (wasm-target-reg-map target))
-         (class-name (gethash (vm-class-reg inst) (wasm-target-known-class-by-reg target)))
-         (layout (and class-name (gethash class-name (wasm-target-class-slot-layouts target))))
-         (slot-count (if layout (hash-table-count layout) 0))
-         (dst (vm-dst inst)))
-    (setf (gethash dst (wasm-target-known-object-class-by-reg target)) class-name)
-    (format stream "~%    ~A"
-            (reg-local-set reg-map dst
-                           (format nil
-                                   "(struct.new $instance_t ~A (array.new $eqref_array_t (ref.null eq) (i32.const ~D)))"
-                                   (reg-local-ref reg-map (vm-class-reg inst))
-                                   slot-count)))))
+  (declare (ignore target stream))
+  (error "Unsupported WASM instruction: ~A" (type-of inst)))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-slot-read) stream)
-  "Emit CLOS slot read via Wasm GC struct/array ops.
-
-Current staged lowering reads from $instance_t slots array and uses a
-conservative slot index 0 placeholder until per-class slot index mapping is
-threaded through the Wasm backend." 
+  "Emit VM-SLOT-READ through a resolved Wasm GC slot layout."
   (let* ((reg-map (wasm-target-reg-map target))
          (obj-reg (vm-obj-reg inst))
          (obj (reg-local-ref reg-map (vm-obj-reg inst)))
-         (slot-idx (wasm-slot-index-for-object-slot target obj-reg (vm-slot-name-sym inst)))
+         (slot-idx (wasm-slot-index-for-object-slot target obj-reg (vm-slot-name-sym inst) inst))
           (slots (format nil "(struct.get $instance_t 1 ~A)"
                          (format nil "(ref.cast (ref $instance_t) ~A)"
                                  (wasm-ref-as-non-null-wat obj)))))
@@ -510,14 +467,12 @@ threaded through the Wasm backend."
                            (format nil "(array.get $eqref_array_t ~A (i32.const ~D))" slots slot-idx)))))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-slot-write) stream)
-  "Emit CLOS slot write via Wasm GC struct/array ops.
-
-Uses staged slot index 0 placeholder pending class-layout-driven index mapping." 
+  "Emit CLOS slot writes through a resolved Wasm GC slot layout."
   (let* ((reg-map (wasm-target-reg-map target))
          (obj-reg (vm-obj-reg inst))
          (obj (reg-local-ref reg-map (vm-obj-reg inst)))
          (val (reg-local-ref reg-map (vm-value-reg inst)))
-         (slot-idx (wasm-slot-index-for-object-slot target obj-reg (vm-slot-name-sym inst)))
+         (slot-idx (wasm-slot-index-for-object-slot target obj-reg (vm-slot-name-sym inst) inst))
           (slots-local (wasm-reg-map-tmp-index reg-map))
           (obj-instance (format nil "(ref.cast (ref $instance_t) ~A)"
                                 (wasm-ref-as-non-null-wat obj)))
@@ -533,7 +488,7 @@ Uses staged slot index 0 placeholder pending class-layout-driven index mapping."
   (let* ((reg-map (wasm-target-reg-map target))
          (obj-reg (vm-obj-reg inst))
          (obj (reg-local-ref reg-map obj-reg))
-         (slot-idx (wasm-slot-index-for-object-slot target obj-reg (vm-slot-name-sym inst)))
+         (slot-idx (wasm-slot-index-for-object-slot target obj-reg (vm-slot-name-sym inst) inst))
          (instance (format nil "(ref.cast (ref $instance_t) ~A)"
                            (wasm-ref-as-non-null-wat obj)))
          (slots (format nil "(struct.get $instance_t 1 ~A)" instance))

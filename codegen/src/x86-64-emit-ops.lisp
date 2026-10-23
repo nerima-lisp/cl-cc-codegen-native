@@ -109,10 +109,8 @@ short-circuits when LHS is nonzero)."
           (emit-mov-ri64 dst int-value stream)))))
 
 (defun emit-vm-get-global (inst stream)
-  "Materialize NIL for VM-GET-GLOBAL in the native staging backend."
-  (emit-mov-ri64 (vm-reg-to-x86 (vm-dst inst))
-                 (vm-const-to-integer nil)
-                 stream))
+  (declare (ignore stream))
+  (error "Unsupported x86-64 instruction: ~A" (type-of inst)))
 
 (defun emit-vm-move (inst stream)
   "Emit code for VM MOVE instruction."

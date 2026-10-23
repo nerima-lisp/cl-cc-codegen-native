@@ -85,14 +85,8 @@
   "Emit AArch64 machine code for one VM instruction."
   (let ((tp (type-of inst)))
     (cond
-      ((or (eq tp 'vm-label)
-           (eq tp 'vm-func-ref)
-            (eq tp 'vm-print)
-            (eq tp 'vm-closure)
-            (eq tp 'vm-type-check)
-            (eq tp 'vm-register-function)
-           (eq tp 'vm-set-global)
-           (eq tp 'cl-cc/optimize::opt-vm-path-profile-record))
+      ((member tp '(vm-label cl-cc/optimize::opt-vm-path-profile-record)
+        :test #'eq)
        nil)
       ((eq tp 'vm-const)
        (emit-a64-vm-const-at inst stream current-pos))
@@ -133,10 +127,7 @@
       (cond
         ((typep inst 'vm-const)
           (let ((value (logand (let ((v (vm-value inst)))
-                                 (cond ((integerp v) v)
-                                       ((null v) 0)
-                                       ((eq v t) 1)
-                                       (t 0)))
+                                 (vm-const-to-integer v))
                                #xFFFFFFFFFFFFFFFF)))
            (when (a64-literal-pool-value-p value)
              (a64-pool-add pool value))))

@@ -155,14 +155,20 @@ match or the br_table helper declines the dispatch."
   "Convert a local instruction-PC EH ENTRY to trampoline block-PC coordinates."
   (let* ((start-pc (getf entry :start-pc))
          (end-pc (getf entry :end-pc))
+         (handler-label (getf entry :handler-label))
          (start-block (gethash start-pc pc->block))
          (end-block (gethash (max start-pc (1- end-pc)) pc->block))
-         (handler-block (gethash (getf entry :handler-label) label-pc-map)))
-    (when (and start-block end-block handler-block)
-      (append entry
-              (list :start-block start-block
-                    :end-block (1+ end-block)
-                    :handler-block handler-block)))))
+         (handler-block (gethash handler-label label-pc-map))
+         (instruction-name (ecase (getf entry :kind)
+                             (:catch "VM-ESTABLISH-CATCH")
+                             (:handler "VM-ESTABLISH-HANDLER"))))
+    (unless (and start-block end-block handler-block)
+      (error "Unsupported WASM instruction: ~A has unresolved EH range ~S..~S or handler ~S"
+             instruction-name start-pc end-pc handler-label))
+    (append entry
+            (list :start-block start-block
+                  :end-block (1+ end-block)
+                  :handler-block handler-block))))
 
 (defun %wasm-effective-eh-entries (basic-blocks label-pc-map reg-map static-entries)
   "Return native Wasm EH dispatch entries for this trampoline body."
@@ -301,11 +307,8 @@ compare tags/payloads without changing the trampoline architecture."
     ;; Outer block: vm-ret/vm-halt break to $exit
     (format stream "~%      (block $exit (result eqref)")
 
-    ;; FR-204: Exception Handling — wrap entire dispatch in try/catch.
-    ;; The Wasm exception handling proposal enables native try/catch/throw
-    ;; instead of PC-dispatch-based exception simulation.  On catch, the
-    ;; exception payload is recovered and the dispatch loop continues with
-    ;; the appropriate handler block's PC index.
+    ;; FR-204: Route conditions through registered handler entries. If no entry
+    ;; matches, rethrow the condition to the caller.
     (format stream "~%        (try $try_body (result eqref)")
     (format stream "~%          (do")
 
@@ -386,12 +389,7 @@ compare tags/payloads without changing the trampoline architecture."
     (format stream "~%          ) ;; end do $try_body")
     ;; FR-204: catch handler for CL conditions
     (format stream "~%          (catch $cl_condition_tag")
-    (format stream "~%            ;; Recover exception payload: tag-value in local $tmp, handler-pc from tag")
-    (format stream "~%            (drop)  ;; pop tag value")
-    (format stream "~%            (drop)  ;; pop exception value")
-    (format stream "~%            ;; Re-enter dispatch loop at block 0 (exception recovery)")
-    (format stream "~%            (local.set ~D (i32.const 0))" (wasm-reg-map-pc-index reg-map))
-    (format stream "~%            (br $dispatch)")
+    (format stream "~%            (rethrow 0)")
     (format stream "~%          ) ;; end catch")
     (format stream "~%        ) ;; end try $try_body")
     (format stream "~%      ) ;; end block $exit")

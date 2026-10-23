@@ -121,7 +121,7 @@
                        (vector +wasm-i64-const+)
                        (wasm-encode-signed-leb128 value)))
          ((null value) (vector +wasm-ref-null+ +heap-none+))
-         (t (vector +wasm-nop+)))))
+         (t (error "Unsupported WASM binary VM-CONST literal: ~S" value)))))
     ((or vm-float-add vm-float-sub vm-float-mul vm-float-div)
      (%wasm-reject-float-arithmetic inst))
     ((or vm-add vm-integer-add) (vector +wasm-i64-add+))
@@ -136,7 +136,7 @@
                           (wasm-encode-unsigned-leb128 0)))
     (vm-ret (vector +wasm-return+))
     (vm-halt (vector +wasm-return+))
-    (t (vector +wasm-nop+))))
+    (t (error "Unsupported WASM binary instruction: ~A" (type-of inst)))))
 
 (defun wasm-binary-module-functions (module)
   "Return MODULE functions in emission order."
@@ -193,7 +193,14 @@
 
 (defun wasm-binary-function-body-bytes (func)
   "Return a stack-neutral MVP function body for FUNC."
-  (declare (ignore func))
+  (when (wasm-func-source-instructions func)
+    (error "Cannot encode WASM binary function ~A instruction ~A"
+           (wasm-func-wat-name func)
+           (type-of (first (wasm-func-source-instructions func)))))
+  (when (wasm-func-body func)
+    (error "Cannot encode WAT body for WASM binary function ~A, unsupported instruction ~S"
+           (wasm-func-wat-name func)
+           (first (wasm-func-body func))))
   (wasm-binary-section-bytes
    (lambda (body)
      (wasm-binary-write-local-decls body nil)

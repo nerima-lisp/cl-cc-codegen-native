@@ -245,23 +245,21 @@ libunwind consumers."
     (t nil)))
 
 (defun x86-64-build-landing-pad-table (instructions label-offsets prologue-size)
-  "Build landing-pad table rows for handler/restart sites.
-
-Rows record protected range start/end, handler type, and handler address.  The
-range begins at the establishing instruction and conservatively extends to the
-handler target when available; this keeps the table useful without changing SJLJ
-semantics."
+  "Build landing-pad rows for handler/restart sites with resolved targets."
   (let ((rows nil)
         (pos prologue-size))
     (dolist (inst instructions (nreverse rows))
       (when (x86-64-eh-site-instruction-p inst)
         (let* ((label (x86-64-eh-site-handler-label inst))
                (handler-address (and label (gethash label label-offsets))))
+          (unless (and (integerp handler-address) (plusp handler-address))
+            (error "Unsupported x86-64 instruction: ~A references unresolved handler label ~S"
+                   (type-of inst) label))
           (push (make-x86-64-landing-pad
                  :start-address pos
-                 :end-address (or handler-address (+ pos (instruction-size inst)))
+                 :end-address handler-address
                  :handler-type (x86-64-eh-site-handler-type inst)
-                 :handler-address (or handler-address 0)
+                 :handler-address handler-address
                  :handler-label label
                  :result-register (x86-64-eh-site-result-register inst)
                  :kind (x86-64-eh-site-kind inst))
@@ -281,31 +279,21 @@ semantics."
           landing-pads))
 
 (defun emit-x86-64-landing-pad-stub (landing-pad stream)
-  "Emit one x86-64 landing-pad transfer stub.
-
-The table-based EH path is still opt-in, but the emitted landing pad is real
-control-transfer code: it tail-jumps to the resolved handler label address.  A
-missing handler address falls back to RET so accidental entry does not execute a
-UD2-only placeholder.  The fixed 16-byte footprint keeps existing offset/table
-assumptions stable."
+  "Emit one x86-64 landing-pad transfer stub with a resolved target."
   (let ((handler-address (x86-64-landing-pad-handler-address landing-pad)))
-    (if (and (integerp handler-address) (plusp handler-address))
-        (progn
-          ;; movabs r11, imm64  => 49 BB imm64
-          (emit-byte #x49 stream)
-          (emit-byte #xBB stream)
-          (dotimes (i 8)
-            (emit-byte (ldb (byte 8 (* i 8)) handler-address) stream))
-          ;; jmp r11 => 41 FF E3
-          (emit-byte #x41 stream)
-          (emit-byte #xFF stream)
-          (emit-byte #xE3 stream)
-          (loop repeat 3 do (emit-byte #x90 stream)))
-        (progn
-          ;; ret + NOP padding: safe fallback when metadata lacks a target.
-          (emit-byte #xC3 stream)
-          (loop repeat (1- +x86-64-landing-pad-size+)
-                do (emit-byte #x90 stream))))))
+    (unless (and (integerp handler-address) (plusp handler-address))
+      (error "Unsupported x86-64 VM handler/restart landing pad for label ~S"
+             (x86-64-landing-pad-handler-label landing-pad)))
+    ;; movabs r11, imm64 => 49 BB imm64
+    (emit-byte #x49 stream)
+    (emit-byte #xBB stream)
+    (dotimes (i 8)
+      (emit-byte (ldb (byte 8 (* i 8)) handler-address) stream))
+    ;; jmp r11 => 41 FF E3
+    (emit-byte #x41 stream)
+    (emit-byte #xFF stream)
+    (emit-byte #xE3 stream)
+    (loop repeat 3 do (emit-byte #x90 stream))))
 
 (defun emit-x86-64-landing-pads (landing-pads stream)
   "Emit all LANDING-PADS when zero-cost EH is enabled."

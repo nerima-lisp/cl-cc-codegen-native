@@ -12,10 +12,9 @@
   (metadata nil :type list))
 
 (defparameter *wasm-tool-timeout-seconds* 120
-  "Timeout in seconds for external Wasm toolchain invocations (wasm-opt,
-wat2wasm, wasm2wat).  These are optional post-processing tools whose runtime
-scales with module size, so the bound is generous; on timeout the caller falls
-back to the un-processed bytes/WAT exactly as it does on tool failure.")
+  "Timeout in seconds for external Wasm tool invocations (wasm-opt,
+wat2wasm, wasm2wat). Tool failures use local fallbacks; WAT-to-binary fallback
+can signal when the built-in serializer cannot encode a module.")
 
 (defun wasm-tool-available-p (program)
   "Return T when PROGRAM can be found on PATH."
@@ -172,8 +171,8 @@ back to the un-processed bytes/WAT exactly as it does on tool failure.")
           (ignore-errors (delete-file tmp))))
       fallback-wat))
 
-(defun wasm-wat-to-binary-if-available (wat fallback-bytes)
-  "Assemble WAT through wat2wasm when available, falling back to FALLBACK-BYTES."
+(defun wasm-wat-to-binary-if-available (wat fallback-thunk)
+  "Assemble WAT through wat2wasm, calling FALLBACK-THUNK when assembly fails or is unavailable."
   (if (wasm-tool-available-p "wat2wasm")
       (let ((tmp-wat (%wasm-temp-path "wat"))
             (tmp-wasm (%wasm-temp-path "wasm")))
@@ -187,11 +186,12 @@ back to the un-processed bytes/WAT exactly as it does on tool failure.")
                                             (list (namestring tmp-wat) "-o" (namestring tmp-wasm))
                                             :search t
                                             :timeout *wasm-tool-timeout-seconds*)
-                   (if (probe-file tmp-wasm) (%wasm-read-bytes-file tmp-wasm) fallback-bytes))
-               (process-kit:process-error () fallback-bytes))
+                   (if (probe-file tmp-wasm) (%wasm-read-bytes-file tmp-wasm)
+                       (funcall fallback-thunk)))
+               (process-kit:process-error () (funcall fallback-thunk)))
           (ignore-errors (delete-file tmp-wat))
-          (ignore-errors (delete-file tmp-wasm))))
-      fallback-bytes))
+          (ignore-errors (delete-file tmp-wasm)))
+      (funcall fallback-thunk))))
 
 (defun wasm-determinize-module! (module)
   "Sort module tables for reproducible AOT emission."
@@ -212,11 +212,17 @@ back to the un-processed bytes/WAT exactly as it does on tool failure.")
   module)
 
 (defun compile-to-aot-wasm (program &key deterministic)
-  "FR-219: Compile PROGRAM to a self-contained AOT .wasm result bundle.
+  "Compile PROGRAM to a self-contained AOT .wasm result bundle.
 
-The function performs dead export/import pruning, optional deterministic
-ordering, optional wat2wasm/wasm-opt integration, and embeds a content-hash
-custom section without requiring external tools to be installed."
+The function keeps only the MAIN export and can eliminate unused host imports.
+Deterministic mode orders functions and globals and appends a custom section
+carrying the content hash. wasm-opt runs when available. wat2wasm assembles the
+full module when available; without it, the built-in binary fallback supports
+only empty function bodies. If assembly is unavailable or fails for a
+nonempty body, compilation signals an encoding error. Unsupported VM
+instructions and host imports without AOT implementations signal errors naming
+the instruction or import. With EH-v2 enabled, AOT compilation rejects its
+host exception bridge imports."
   (let* ((*wasm-aot-mode-enabled* t)
          (module (extract-wasm-functions program)))
     (build-all-wasm-functions module)
@@ -224,7 +230,7 @@ custom section without requiring external tools to be installed."
       (wasm-determinize-module! module))
     (wasm-eliminate-dead-exports! module)
     (let* ((wat (with-output-to-string (s) (emit-wasm-module module s)))
-           (fallback (emit-wasm-binary-module module))
+           (fallback (lambda () (emit-wasm-binary-module module)))
            (assembled (wasm-wat-to-binary-if-available wat fallback))
            (optimized (wasm-run-wasm-opt-passes assembled :aot t))
            (sha256 (%wasm-byte-vector-hex-digest optimized 256))

@@ -38,9 +38,8 @@
       (format stream "  add rsp, ~D~%" (* 8 (length extra-args))))))
 
 (defmethod emit-instruction (target (inst vm-type-check) stream)
-  "No-op: runtime type-check instructions are metadata only on x86-64."
-  (declare (ignore target inst stream))
-  nil)
+  (declare (ignore target stream))
+  (error "Unsupported x86-64 instruction: ~A" (type-of inst)))
 
 (defmethod emit-instruction (target (inst vm-deopt) stream)
   "FR-522: Emit deoptimization checkpoint code.
@@ -133,9 +132,8 @@ register state, and jumps to this label."
           (target-register target (vm-dst inst))
           (vm-value inst)))
 (defmethod emit-instruction ((target x86-64-target) (inst vm-get-global) stream)
-  "Materialize NIL for VM-GET-GLOBAL in the native staging backend."
-  (format stream "  mov ~A, 0~%"
-          (target-register target (vm-dst inst))))
+  (declare (ignore target stream))
+  (error "Unsupported x86-64 instruction: ~A" (type-of inst)))
 
 (defmethod emit-instruction ((target x86-64-target) (inst vm-move) stream)
   (format stream "  mov ~A, ~A~%"

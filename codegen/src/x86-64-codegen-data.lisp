@@ -62,7 +62,7 @@ virtual registers."
   '(
     ;; Constants and copies
     (vm-const                          10)  ; REX + opcode + 8-byte immediate
-    (vm-get-global                     10)  ; materialize NIL in the staging backend
+    (vm-get-global nil)  ; no native lowering; instruction sizing reports unsupported
     (vm-move                            3)  ; REX + opcode + ModR/M
     ;; Arithmetic: mov + op
     ((vm-add vm-integer-add)            6)  ; mov + add (3+3)
@@ -79,11 +79,8 @@ virtual registers."
     (vm-jump                            5)  ; JMP rel32
     (vm-jump-zero                       9)  ; TEST + JE rel32 (3 + 6)
     (vm-ret                             1)  ; RET
-    ;; No-ops in native codegen
     ;; I/O: vm-print = MOV RDI(3) + MOV R11(10) + CALL R11(3) = 16 bytes (FR-298)
     (vm-print                           16)
-    (vm-closure                          0)
-    (vm-type-check                       0)
     (vm-call                            6)
      (vm-tail-call                       3)
      ;; FR-073 register multiple-values: up to three MOV rr64 instructions.
@@ -144,15 +141,15 @@ virtual registers."
     ;; Type predicates: null-p = 11; others = 10 (MOV imm64)
     (vm-null-p                         11)
     ((vm-number-p vm-integer-p vm-cons-p vm-symbol-p vm-function-p) 10)
-    ;; FR-318 staged path: non-local control instructions use conditional
-    ;; shadow-stack marker sequences (enabled=6 bytes / disabled=2 bytes).
+    ;; Non-local control instructions need shadow-stack support; their size is
+    ;; determined by the feature-gated instruction-size logic.
     ((cl-cc/vm:vm-push-handler cl-cc/vm:vm-pop-handler
       cl-cc/vm:vm-bind-restart cl-cc/vm:vm-invoke-restart
       cl-cc/vm:vm-signal cl-cc/vm:vm-error-instruction
       cl-cc/vm:vm-cerror cl-cc/vm:vm-warn
       cl-cc/vm:vm-establish-handler cl-cc/vm:vm-remove-handler
       cl-cc/vm:vm-sync-handler-regs cl-cc/vm:vm-signal-error
-      cl-cc/vm:vm-establish-catch cl-cc/vm:vm-throw) 2))
+      cl-cc/vm:vm-establish-catch cl-cc/vm:vm-throw) nil))
   "Declarative spec: VM instruction types → x86-64 encoded byte sizes.
    Each entry is (type-spec size) where type-spec is a symbol or list of symbols.")
 

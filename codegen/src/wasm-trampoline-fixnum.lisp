@@ -337,8 +337,8 @@ index access instead of the intermediate $env_t struct wrapper."
                                         (wasm-table-const-wat table-idx)
                                         :tail-p t))
         (let ((pc-idx (gethash label-name label-pc-map)))
-          (if pc-idx
-              (format stream "~%      (local.set ~D (i32.const ~D))"
-                      (wasm-reg-map-pc-index reg-map) pc-idx)
-              (format stream "~%      ;; WARNING: unknown label ~S" label-name))
+          (unless pc-idx
+            (error "WASM VM-JUMP references unknown label ~S" label-name))
+          (format stream "~%      (local.set ~D (i32.const ~D))"
+                  (wasm-reg-map-pc-index reg-map) pc-idx)
           (format stream "~%      (br $dispatch)")))))

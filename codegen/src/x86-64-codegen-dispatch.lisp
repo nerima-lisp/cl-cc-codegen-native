@@ -171,14 +171,10 @@ When FUNC-REG is RAX, use RCX as scratch to avoid clobbering the branch target."
           (emit-jmp-r64 func stream)))))
 
 (defun emit-vm-shadow-stack-control-inst (inst stream)
-  "Emit CET shadow-stack transition sequences for non-local control ops.
+  "Emit CET transition instructions for non-local VM control operations.
 
-These instructions participate in exception/restart control flow and require
-dedicated native lowering to preserve shadow-stack semantics. Current lowering
-materializes explicit CET SS instructions under the shadow-stack gate:
-
-- Shadow-stack enabled  => emit CET SS save/restore/adjust instruction slots.
-- Shadow-stack disabled => 2-byte NOP placeholder (reserved integration slot)."
+When shadow-stack support is disabled, signal an unsupported-instruction error
+instead of emitting a placeholder."
   (if *x86-64-shadow-stack-enabled*
       (cond
         ;; handler/restart push-like sites => SAVEPREVSSP (4B) + NOP2 (2B) = 6B
@@ -213,13 +209,11 @@ materializes explicit CET SS instructions under the shadow-stack gate:
          (emit-byte #xAE stream)
          (emit-byte #xE8 stream)
          (emit-byte #x90 stream)))
-      (progn
-        ;; Keep fixed 2-byte footprint for label-size accounting.
-        (emit-byte #x66 stream)
-        (emit-byte #x90 stream))))
+      (error "Unsupported x86-64 instruction: ~A requires shadow-stack support"
+               (type-of inst))))
 
 (defun emit-vm-native-noop-inst (inst stream)
-  "Emit nothing for VM-only metadata/check instructions with no native lowering yet."
+  "Emit no code for VM path-profile metadata, which is tracked outside native code."
   (declare (ignore inst stream))
   nil)
 
@@ -397,9 +391,6 @@ materializes explicit CET SS instructions under the shadow-stack gate:
     (vm-atan-inst    . emit-vm-atan)
     ;; FR-298: vm-print with real I/O (indirect call through R11)
     (vm-print        . emit-vm-print)
-    (vm-type-check   . emit-vm-native-noop-inst)
-    (vm-deopt        . emit-vm-native-noop-inst)
-    (vm-osr-entry    . emit-vm-native-noop-inst)
     ;; Ball-Larus path profiling: profiling counter update, no native emission
     (cl-cc/optimize::opt-vm-path-profile-record . emit-vm-native-noop-inst)
     (vm-halt         . emit-vm-halt-inst)

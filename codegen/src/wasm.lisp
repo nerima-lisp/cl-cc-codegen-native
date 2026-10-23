@@ -60,18 +60,19 @@
           (or num 0)))))
 
 (defun %wasm-function-index-for-label (module label)
-  "Return LABEL's function index using MODULE's function table."
-  (or (and module (wasm-module-function-index-for-label module label))
-      (let ((func (find label (wasm-module-functions module)
-                        :key (lambda (f)
-                               (let ((wat-name (wasm-func-wat-name f)))
-                                 (if (and wat-name (> (length wat-name) 0)
-                                          (char= (char wat-name 0) #\$))
-                                     (subseq wat-name 1)
-                                     wat-name)))
-                        :test #'equal)))
-        (when func
-          (wasm-func-index func)))))
+  "Return LABEL's function index when MODULE contains it."
+  (when module
+    (or (wasm-module-function-index-for-label module label)
+        (let ((func (find label (wasm-module-functions module)
+                          :key (lambda (f)
+                                 (let ((wat-name (wasm-func-wat-name f)))
+                                   (if (and wat-name (> (length wat-name) 0)
+                                            (char= (char wat-name 0) #\$))
+                                       (subseq wat-name 1)
+                                       wat-name)))
+                          :test #'equal)))
+          (when func
+            (wasm-func-index func))))))
 
 (defun %wasm-main-function-type-index (module)
   "Return the canonical type index for backend-generated CL functions."

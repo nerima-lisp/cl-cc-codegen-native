@@ -277,12 +277,11 @@ YMM physical names and the existing XMM allocation class used for SIMD values."
       (cdr entry))))
 
 (defun vm-const-to-integer (value)
-  "Coerce a VM constant value to an integer for native code emission.
-   In integer-only binary mode: nil->0, t->1, integers pass through, other->0."
+  "Convert a supported VM-CONST literal to its native integer value."
   (cond ((null value) 0)
         ((eq value t) 1)
         ((integerp value) value)
-        (t 0)))
+        (t (error "Unsupported VM-CONST literal for native codegen: ~S" value))))
 
 (defun x86-64-double-float-bits (value)
   "Return the IEEE754 bit pattern for VALUE as an unsigned 64-bit integer.

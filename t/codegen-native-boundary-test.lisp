@@ -18,6 +18,17 @@
 
 (in-package :cl-cc-codegen-native/test)
 
+(progn
+  (defun %capture-codegen-error (thunk)
+    (handler-case
+        (progn (funcall thunk) nil)
+      (error (condition) condition)))
+
+  (defun %codegen-error-names-p (thunk name)
+    (let ((condition (%capture-codegen-error thunk)))
+      (and condition
+           (search name (string-upcase (princ-to-string condition)))))))
+
 (defun %internal-vm-references-in (path)
   "Return the distinct CL-CC/VM internal symbol names named under PATH."
   (let ((names '()))
@@ -124,16 +135,36 @@
                target :object (quote first))
               :to-be 0)))
 
-  (it "rejects slots with no recorded layout"
-    (let ((target (make-instance (quote cl-cc/emit:wasm-target))))
-      (dolist (lookup (list
-                        (lambda ()
-                          (cl-cc/codegen::wasm-slot-index-for
-                            target (quote missing)))
-                        (lambda ()
-                          (cl-cc/codegen::wasm-slot-index-for-object-slot
-                            target :object (quote missing)))))
-        (signals error (funcall lookup))))))
+  (it "rejects missing slot layouts by VM instruction name"
+      (let* ((target (make-instance (quote cl-cc/emit:wasm-target)
+                                    :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 3)))
+             (instructions
+              (list (list "VM-SLOT-READ"
+                          (cl-cc/vm:make-vm-slot-read
+                           :dst :r0 :obj-reg :r1 :slot-name (quote missing)))
+                    (list "VM-SLOT-WRITE"
+                          (cl-cc/vm:make-vm-slot-write
+                           :obj-reg :r1 :slot-name (quote missing) :value-reg :r2))
+                    (list "VM-SLOT-BOUNDP"
+                          (cl-cc/vm:make-vm-slot-boundp
+                           :dst :r0 :obj-reg :r1 :slot-name-sym (quote missing))))))
+        (dolist (case instructions)
+          (destructuring-bind (name inst) case
+            (let ((stream (make-string-output-stream)))
+              (expect (%codegen-error-names-p
+                       (lambda () (cl-cc/codegen::emit-instruction target inst stream))
+                       name)
+                      :to-be-truthy)
+              (expect (get-output-stream-string stream) :to-equal ""))))
+        (let ((target (make-instance (quote cl-cc/emit:wasm-target))))
+          (dolist (lookup (list
+                           (lambda ()
+                             (cl-cc/codegen::wasm-slot-index-for
+                              target (quote missing)))
+                           (lambda ()
+                             (cl-cc/codegen::wasm-slot-index-for-object-slot
+                              target :object (quote missing)))))
+            (signals error (funcall lookup)))))))
 
 (describe-sequential "WASM emission rejects unsupported instructions"
   (it "rejects all float arithmetic in text and binary lowering"
@@ -399,7 +430,63 @@ only owns the accumulation."
             (declare (ignore arguments))
             (error 'process-kit:process-error))))
       (expect (cl-cc/codegen::wasm-run-wasm-opt-passes #(1 2 3) :aot t)
-              :to-equalp #(1 2 3)))))
+              :to-equalp #(1 2 3))))
+  (it "does not evaluate the binary fallback when wat2wasm assembles the module"
+    (let* ((module (cl-cc/codegen::make-empty-wasm-module))
+           (func (cl-cc/codegen::make-wasm-function-def
+                  :wat-name "$main"
+                  :body '("(i32.const 1)")
+                  :exported-p t
+                  :export-name "main"))
+           (expected-bytes #(0 97 115 109 1 0 0 0)))
+      (cl-cc/codegen::wasm-module-add-function module func)
+      (with-mocked-functions
+          (((symbol-function 'cl-cc/codegen::extract-wasm-functions)
+            (lambda (program) (declare (ignore program)) module))
+           ((symbol-function 'cl-cc/codegen::build-all-wasm-functions)
+            (lambda (ignored-module) (declare (ignore ignored-module))))
+           ((symbol-function 'cl-cc/codegen::emit-wasm-module)
+            (lambda (ignored-module stream)
+              (declare (ignore ignored-module))
+              (write-string "(module)" stream)))
+           ((symbol-function 'cl-cc/codegen::wasm-tool-available-p)
+            (lambda (program) (string= program "wat2wasm")))
+           ((symbol-function 'process-kit:run/checked)
+            (lambda (program args &rest options)
+              (declare (ignore options))
+              (expect program :to-equal "wat2wasm")
+              (cl-cc/codegen::%wasm-write-bytes-file
+               (nth (1+ (position "-o" args :test #'string=)) args)
+               expected-bytes)
+              (process-kit:make-process-result :stdout ""))))
+        (let ((result (cl-cc/codegen::compile-to-aot-wasm nil)))
+          (expect (cl-cc/codegen::wasm-aot-result-bytes result)
+                  :to-equalp expected-bytes)
+          (expect (cl-cc/codegen::wasm-aot-result-wat result)
+                  :to-equal "(module)")))))
+  (it "preserves unsupported-instruction errors when wat2wasm is unavailable"
+    (let* ((module (cl-cc/codegen::make-empty-wasm-module))
+           (func (cl-cc/codegen::make-wasm-function-def
+                  :wat-name "$main"
+                  :source-instructions
+                  (list (cl-cc/vm:make-vm-prefetch
+                         :base-reg :r0 :index-reg :r1)))))
+      (cl-cc/codegen::wasm-module-add-function module func)
+      (with-mocked-functions
+          (((symbol-function 'cl-cc/codegen::extract-wasm-functions)
+            (lambda (program) (declare (ignore program)) module))
+           ((symbol-function 'cl-cc/codegen::build-all-wasm-functions)
+            (lambda (ignored-module) (declare (ignore ignored-module))))
+           ((symbol-function 'cl-cc/codegen::emit-wasm-module)
+            (lambda (ignored-module stream)
+              (declare (ignore ignored-module))
+              (write-string "(module)" stream)))
+           ((symbol-function 'cl-cc/codegen::wasm-tool-available-p)
+            (lambda (program) (declare (ignore program)) nil)))
+        (expect (%codegen-error-names-p
+                 (lambda () (cl-cc/codegen::compile-to-aot-wasm nil))
+                 "VM-PREFETCH")
+                :to-be-truthy)))))
 
 (describe-sequential "x86-64-ibrs-token-present-p token boundary matching"
   (it-each (("cpu features: ibrs" t)
@@ -749,29 +836,26 @@ only owns the accumulation."
             :to-equalp #(#x63 #x88 #x02 #x00))))
 
 (describe-sequential "riscv64-codegen.lisp: emit-riscv64-vm-select (*riscv64-zicond-enabled* branch)"
-  ;; Default T: branchless via Zicond CZERO.EQZ/CZERO.NEZ/OR. Disabled:
-  ;; falls back to a placeholder ADDI dst,then,0 that ignores cond/else
-  ;; entirely -- per the function's own docstring, a known-incomplete
-  ;; non-Zicond path, not a real conditional select.
-  (it "with Zicond enabled (default): CZERO.EQZ t0,then,cond + CZERO.NEZ dst,else,cond + OR dst,dst,t0"
+  (it "with Zicond enabled: emits CZERO.EQZ, CZERO.NEZ, and OR"
     (expect (%collect-emitted-octets
              (lambda (sink)
                (cl-cc/codegen::emit-riscv64-vm-select
                 (cl-cc/vm:make-vm-select :dst :a0 :cond-reg :t3
                                           :then-reg :t1 :else-reg :t2)
                 sink)))
-            :to-equalp #(#xB3 #x52 #xC3 #x0F   ; CZERO.EQZ t0, t1, t3
-                         #x33 #xF5 #xC3 #x0F   ; CZERO.NEZ a0, t2, t3
-                         #x33 #x65 #x55 #x00))) ; OR a0, a0, t0
-  (it "with Zicond disabled: emits only the placeholder ADDI dst,then,0"
-    (let ((cl-cc/codegen::*riscv64-zicond-enabled* nil))
-      (expect (%collect-emitted-octets
-               (lambda (sink)
+            :to-equalp #(#xB3 #x52 #xC3 #x0F
+                         #x33 #xF5 #xC3 #x0F
+                         #x33 #x65 #x55 #x00)))
+  (it "signals a named error when Zicond is disabled"
+    (let* ((cl-cc/codegen::*riscv64-zicond-enabled* nil)
+           (inst (cl-cc/vm:make-vm-select
+                  :dst :a0 :cond-reg :t3 :then-reg :t1 :else-reg :t2)))
+      (expect (%codegen-error-names-p
+               (lambda ()
                  (cl-cc/codegen::emit-riscv64-vm-select
-                  (cl-cc/vm:make-vm-select :dst :a0 :cond-reg :t3
-                                            :then-reg :t1 :else-reg :t2)
-                  sink)))
-              :to-equalp #(#x13 #x05 #x03 #x00)))))
+                  inst (lambda (word) (declare (ignore word)))))
+               "VM-SELECT")
+              :to-be-truthy))))
 
 (describe-sequential "riscv64-codegen.lisp: define-riscv64-binary-emitter family (add/sub/mul/div/rem)"
   ;; Each is a single R-type instruction differing only in funct3/funct7 --
@@ -1899,15 +1983,22 @@ only owns the accumulation."
            (cl-cc/vm:make-vm-func-ref :dst :r1 :label "callee" :params nil)
            sink 10 label-offsets)))
        :to-equalp #(#x48 #x8D #x0D 0 0 0 0)))))
-(describe-sequential "x86-64-codegen-dispatch.lisp: VM-GET-GLOBAL emission"
-  (it "materializes NIL in the destination register"
-    (expect
-     (%collect-emitted-octets
-      (lambda (sink)
-        (cl-cc/codegen::emit-vm-instruction-with-labels
-         (cl-cc/vm:make-vm-get-global :dst :r1 :name (quote unbound))
-         sink 0 (make-hash-table :test (quote equal)))))
-     :to-equalp #(#x48 #xB9 0 0 0 0 0 0 0 0))))
+(describe-sequential "x86-64-codegen-dispatch.lisp: VM-GET-GLOBAL emission and sizing"
+  (it "rejects VM-GET-GLOBAL by name before emitting bytes or assigning a size"
+    (let ((inst (cl-cc/vm:make-vm-get-global :dst :r1 :name (quote unbound)))
+          (bytes nil))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-vm-instruction-with-labels
+                  inst (lambda (octet) (push octet bytes))
+                  0 (make-hash-table :test (quote equal))))
+               "VM-GET-GLOBAL")
+              :to-be-truthy)
+      (expect bytes :to-equal nil)
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::instruction-size inst))
+               "VM-GET-GLOBAL")
+              :to-be-truthy))))
 (describe-sequential "x86-64.lisp: legacy VM-FUNC-REF and VM-GET-GLOBAL emission"
   (it "materializes the target label with RIP-relative LEA"
     (expect
@@ -1917,14 +2008,17 @@ only owns the accumulation."
         (cl-cc/vm:make-vm-func-ref :dst :r1 :label "callee" :params nil)
         stream))
      :to-equal (format nil "  lea rbx, [rel callee]~%")))
-  (it "materializes NIL in the destination register"
-    (expect
-     (with-output-to-string (stream)
-       (cl-cc/codegen::emit-instruction
-        (make-instance (quote cl-cc/codegen:x86-64-target))
-        (cl-cc/vm:make-vm-get-global :dst :r1 :name (quote unbound))
-        stream))
-     :to-equal (format nil "  mov rbx, 0~%"))))
+  (it "rejects VM-GET-GLOBAL before writing text"
+    (let ((stream (make-string-output-stream)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-instruction
+                  (make-instance (quote cl-cc/codegen:x86-64-target))
+                  (cl-cc/vm:make-vm-get-global :dst :r1 :name (quote unbound))
+                  stream))
+               "VM-GET-GLOBAL")
+              :to-be-truthy)
+      (expect (get-output-stream-string stream) :to-equal ""))))
 (describe-sequential "x86-64-codegen-dispatch.lisp: fits-in-rel8-p"
   (it-each ((0 t) (127 t) (-128 t) (128 nil) (-129 nil))
       "fits-in-rel8-p(~A) => ~A"
@@ -2726,19 +2820,25 @@ only owns the accumulation."
               :to-equal (format nil "(struct.new $symbol_t ~A (ref.null eq))"
                                 (cl-cc/codegen::%wasm-symbol-name-string-t-eqref "AB"))))))
 
-(describe-sequential "wasm-emit-instrs.lisp: %wasm-reg-or-null-eqref"
-  ;; NIL is itself a symbol in Common Lisp ((symbolp nil) => T), so it falls
-  ;; into the SYMBOLP clause below, not the final T/"(ref.null eq)" fallback --
-  ;; despite the function's own docstring grouping "NIL/other literal" together
-  ;; as if they shared a branch. Pinning this by an explicit NIL case rather
-  ;; than trusting the docstring's phrasing.
-  (it "returns the staged empty-symbol eqref for any non-keyword symbol, including NIL"
-    (expect (cl-cc/codegen::%wasm-reg-or-null-eqref nil 'ab)
-            :to-equal (cl-cc/codegen::%wasm-empty-symbol-eqref))
-    (expect (cl-cc/codegen::%wasm-reg-or-null-eqref nil nil)
-            :to-equal (cl-cc/codegen::%wasm-empty-symbol-eqref)))
-  (it "returns (ref.null eq) for a non-symbol literal, e.g. an integer"
-    (expect (cl-cc/codegen::%wasm-reg-or-null-eqref nil 42) :to-equal "(ref.null eq)")))
+(describe-sequential "wasm-emit-instrs.lisp: %wasm-register-method-value-eqref"
+  (it "represents NIL as null and symbols as their named symbol values"
+    (expect (cl-cc/codegen::%wasm-register-method-value-eqref nil)
+            :to-equal "(ref.null eq)")
+    (expect (cl-cc/codegen::%wasm-register-method-value-eqref 'ab)
+            :to-equal (cl-cc/codegen::%wasm-symbol-literal-eqref 'ab))
+    (expect (cl-cc/codegen::%wasm-register-method-value-eqref :around)
+            :to-equal (cl-cc/codegen::%wasm-symbol-literal-eqref :around)))
+  (it "rejects metadata shapes that are not represented"
+    (expect (%codegen-error-names-p
+             (lambda ()
+               (cl-cc/codegen::%wasm-register-method-value-eqref '(eql 42)))
+             "VM-REGISTER-METHOD")
+            :to-be-truthy)
+    (expect (%codegen-error-names-p
+             (lambda ()
+               (cl-cc/codegen::%wasm-register-method-value-eqref 42))
+             "VM-REGISTER-METHOD")
+            :to-be-truthy)))
 
 (describe-sequential "aarch64-codegen-labels.lisp: a64-instruction-size"
   ;; *CURRENT-A64-REGALLOC* and *CURRENT-A64-EPILOGUE-SAVE-PAIRS* both default
@@ -2769,21 +2869,34 @@ only owns the accumulation."
     (expect (cl-cc/codegen::a64-instruction-size
              (cl-cc/vm:make-vm-prefetch :base-reg :r0 :index-reg nil))
             :to-be 4))
-  (it "vm-print falls through to the fixed instruction-size table (0 -- print is a no-op here)"
-    (expect (cl-cc/codegen::a64-instruction-size (cl-cc/vm:make-vm-print :reg :r0)) :to-be 0)))
+  (it "a64-instruction-size rejects instructions the encoder cannot lower"
+    (dolist (inst (list (cl-cc/vm:make-vm-func-ref
+                         :dst :r1 :label "callee" :params nil)
+                        (cl-cc/vm:make-vm-print :reg :r0)
+                        (cl-cc/vm:make-vm-closure
+                         :dst :r0 :label "callee" :params nil)
+                        (cl-cc/vm:make-vm-type-check
+                         :src :r0 :type-name 'integer :label "resume" :id 1)
+                        (cl-cc/vm:make-vm-register-function :name 'callee :src :r0)
+                        (cl-cc/vm:make-vm-set-global :name 'global :src :r0)
+                        (cl-cc/vm:make-vm-string-upcase :dst :r1 :src :r0)))
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::a64-instruction-size inst))
+               (string-upcase (symbol-name (type-of inst))))
+              :to-be-truthy))))
 
 (describe-sequential "aarch64-codegen-labels.lisp: build-a64-label-offsets"
   (it "records each label's byte offset from PROLOGUE-SIZE, advancing by each instruction's real size"
     (let ((offsets (cl-cc/codegen::build-a64-label-offsets
-                     (list (cl-cc/vm:make-vm-label :name 'start)
-                           (cl-cc/vm:make-vm-print :reg :r0)
-                           (cl-cc/vm:make-vm-label :name 'mid)
-                           (cl-cc/vm:make-vm-move :dst :r0 :src :r1)
-                           (cl-cc/vm:make-vm-label :name 'endlbl))
-                     8)))
+                    (list (cl-cc/vm:make-vm-label :name 'start)
+                          (cl-cc/vm:make-vm-move :dst :r0 :src :r1)
+                          (cl-cc/vm:make-vm-label :name 'mid)
+                          (cl-cc/vm:make-vm-move :dst :r2 :src :r3)
+                          (cl-cc/vm:make-vm-label :name 'endlbl))
+                    8)))
       (expect (gethash 'start offsets) :to-be 8)
-      (expect (gethash 'mid offsets) :to-be 8)
-      (expect (gethash 'endlbl offsets) :to-be 12))))
+      (expect (gethash 'mid offsets) :to-be 12)
+      (expect (gethash 'endlbl offsets) :to-be 16))))
 
 (describe-sequential "wasm-ir.lisp: make-empty-wasm-module"
   (it "initializes all 4 lookup tables as fresh, empty hash tables"
@@ -3014,11 +3127,13 @@ only owns the accumulation."
     (let* ((module (cl-cc/codegen::make-empty-wasm-module))
            (func (cl-cc/codegen::make-wasm-function-def
                   :wat-name "$foo"
-                  :body (list "(call $host_write_char (i32.const 65))")
+                  :body (list "(call $host_write_char (i32.const 65))"
+                              "(call $js_host_object)")
                   :source-instructions (list (cl-cc/vm:make-vm-print :reg :r0)))))
       (cl-cc/codegen::wasm-module-add-function module func)
       (let ((used (cl-cc/codegen::wasm-module-used-host-imports module)))
         (expect (gethash "write_char" used) :to-be t)
+        (expect (gethash "js_host_object" used) :to-be t)
         (expect (gethash "print_val" used) :to-be t)
         (expect (gethash "condition_to_exnref" used) :to-be t)
         (expect (gethash "exnref_payload" used) :to-be t)
@@ -3026,15 +3141,64 @@ only owns the accumulation."
         (expect (gethash "read_char" used) :to-be nil)
         (expect (gethash "register_method" used) :to-be nil)))))
 
-(describe-sequential "wasm-imports.lisp: emit-wat-aot-host-stubs"
-  ;; *WASM-DEAD-IMPORT-ELIMINATION-ENABLED* defaults T but
-  ;; *WASM-AOT-CURRENT-USED-IMPORTS* defaults NIL, so %WASM-IMPORT-NEEDED-P's
-  ;; conservative "no tracking set yet" fallback keeps every stub -- see the
-  ;; earlier wasm-imports.lisp coverage-baseline entry for this same fallback.
-  (it "emits all 7 no-op host stubs when no import-usage tracking is active"
-    (expect (with-output-to-string (s) (cl-cc/codegen::emit-wat-aot-host-stubs s))
-            :to-equal
-            (format nil "~%  ;; FR-219: AOT host bridge stubs (no mandatory JS imports)~%  (func $host_write_char (param i32))~%  (func $host_read_char (result i32) (i32.const -1))~%  (func $host_write_string (param (ref $string_t)))~%  (func $host_error (param (ref $string_t)))~%  (func $host_print_val (param eqref))~%  (func $host_rt_register_method (param eqref) (param eqref) (param eqref) (param eqref))~%  (func $host_rt_call_generic (param eqref) (param i32) (result eqref) (ref.null eq))"))))
+(describe-sequential "wasm-imports.lisp: reject-unimplemented-aot-host-bridges"
+  (it "emits no AOT bridge code when no host operations are used"
+    (let ((used (make-hash-table :test (function equal)))
+          (stream (make-string-output-stream)))
+      (let ((cl-cc/codegen::*wasm-aot-mode-enabled* t)
+            (cl-cc/codegen::*wasm-aot-current-used-imports* used))
+        (cl-cc/codegen::emit-wat-imports stream))
+      (expect (get-output-stream-string stream) :to-equal "")))
+  (it "rejects a host bridge discovered from VM source instructions"
+    (let* ((module (cl-cc/codegen::make-empty-wasm-module))
+           (func (cl-cc/codegen::make-wasm-function-def
+                  :wat-name "$main"
+                  :source-instructions (list (cl-cc/vm:make-vm-print :reg :r0))))
+           (stream (make-string-output-stream)))
+      (cl-cc/codegen::wasm-module-add-function module func)
+      (let ((cl-cc/codegen::*wasm-aot-mode-enabled* t)
+            (cl-cc/codegen::*wasm-aot-current-used-imports*
+              (cl-cc/codegen::wasm-module-used-host-imports module)))
+        (expect (%codegen-error-names-p
+                 (lambda () (cl-cc/codegen::emit-wat-imports stream))
+                 "VM-PRINT")
+                :to-be-truthy)
+        (expect (get-output-stream-string stream) :to-equal ""))))
+  (it "rejects EH-v2 host imports required by the default feature set"
+    (let* ((module (cl-cc/codegen::make-empty-wasm-module))
+           (stream (make-string-output-stream)))
+      (let ((cl-cc/codegen::*wasm-aot-mode-enabled* t)
+            (cl-cc/codegen::*wasm-aot-current-used-imports*
+              (cl-cc/codegen::wasm-module-used-host-imports module)))
+        (expect (%codegen-error-names-p
+                 (lambda () (cl-cc/codegen::emit-wat-imports stream))
+                 "$CL_CONDITION_TO_EXNREF")
+                :to-be-truthy)
+        (expect (get-output-stream-string stream) :to-equal ""))))
+  (it-each (("write_char" "$HOST_WRITE_CHAR")
+            ("read_char" "$HOST_READ_CHAR")
+            ("write_string" "$HOST_WRITE_STRING")
+            ("error" "$HOST_ERROR")
+            ("print_val" "VM-PRINT")
+            ("register_method" "VM-REGISTER-METHOD")
+            ("call_generic" "VM-GENERIC-CALL")
+            ("condition-tag" "$CL_CONDITION_TAG")
+            ("condition_to_exnref" "$CL_CONDITION_TO_EXNREF")
+            ("exnref_payload" "$CL_EXNREF_PAYLOAD")
+            ("exnref_tag" "$CL_EXNREF_TAG")
+            ("js_host_object" "$JS_HOST_OBJECT"))
+      "signals instead of emitting an unsupported AOT bridge for ~A"
+      (name error-name)
+    (let ((used (make-hash-table :test (function equal)))
+          (stream (make-string-output-stream)))
+      (setf (gethash name used) t)
+      (let ((cl-cc/codegen::*wasm-aot-mode-enabled* t)
+            (cl-cc/codegen::*wasm-aot-current-used-imports* used))
+        (expect (%codegen-error-names-p
+                 (lambda () (cl-cc/codegen::emit-wat-imports stream))
+                 error-name)
+                :to-be-truthy)
+        (expect (get-output-stream-string stream) :to-equal "")))))
 
 (describe-sequential "stack-maps.lisp: %cg-mir-stack-root-p"
   (it "recognizes a plist entry explicitly kinded :stack, with a root-shaped :type"
@@ -3147,10 +3311,17 @@ only owns the accumulation."
                               (list :toplevel move3))))))
 
 (describe-sequential "x86-64-regs.lisp: vm-const-to-integer"
-  (it-each ((nil 0) (t 1) (5 5) (-3 -3) ("str" 0) (:foo 0))
-      "vm-const-to-integer(~S) => ~A"
-      (value expected)
-    (expect (cl-cc/codegen::vm-const-to-integer value) :to-be expected)))
+  (it "coerces NIL, T, and integers to native integer values"
+    (expect (cl-cc/codegen::vm-const-to-integer nil) :to-be 0)
+    (expect (cl-cc/codegen::vm-const-to-integer t) :to-be 1)
+    (expect (cl-cc/codegen::vm-const-to-integer 5) :to-be 5)
+    (expect (cl-cc/codegen::vm-const-to-integer -3) :to-be -3))
+  (it "rejects unsupported literals by VM-CONST name"
+    (dolist (value (list "str" :foo))
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::vm-const-to-integer value))
+               "VM-CONST")
+              :to-be-truthy))))
 
 (describe-sequential "x86-64-regs.lisp: x86-64-float-vreg-p"
   (it "is NIL when no float-vreg tracking table is bound"
@@ -4218,36 +4389,43 @@ only owns the accumulation."
                 (cl-cc/vm:make-vm-sqrt :dst :r1 :src :r2) sink)))
             :to-equalp #(#x41 #xC0 #x61 #x1E))))
 
-(describe-sequential "aarch64-emitters.lisp: emit-a64-vm-const (value coercion + MOVZ/MOVK chunking)"
-  ;; VM-VALUE coerces through a 4-armed COND (integerp / null / eq T / else)
-  ;; before being loaded via EMIT-A64-MOV-IMM64's MOVZ+MOVK chunk sequence.
-  ;; Covering all 4 COND arms plus a value needing every MOVK chunk.
-  (it "coerces a NIL value to 0, emitting only MOVZ Xd,#0"
+(describe-sequential "aarch64-emitters.lisp: emit-a64-vm-const"
+  (it "coerces NIL to 0, emitting only MOVZ Xd,#0"
     (expect (%collect-emitted-octets
              (lambda (sink)
                (cl-cc/codegen::emit-a64-vm-const
                 (cl-cc/vm:make-vm-const :dst :r1 :value nil) sink)))
             :to-equalp #(#x01 #x00 #x80 #xD2)))
-  (it "coerces a T value to 1, emitting only MOVZ Xd,#1"
+  (it "coerces T to 1, emitting only MOVZ Xd,#1"
     (expect (%collect-emitted-octets
              (lambda (sink)
                (cl-cc/codegen::emit-a64-vm-const
                 (cl-cc/vm:make-vm-const :dst :r1 :value t) sink)))
             :to-equalp #(#x21 #x00 #x80 #xD2)))
-  (it "coerces a non-integer, non-NIL, non-T value (a keyword) to 0 via the fallback COND arm"
-    (expect (%collect-emitted-octets
-             (lambda (sink)
-               (cl-cc/codegen::emit-a64-vm-const
-                (cl-cc/vm:make-vm-const :dst :r1 :value :unrepresentable) sink)))
-            :to-equalp #(#x01 #x00 #x80 #xD2)))
+  (it "rejects unsupported VM-CONST literals during emission, sizing, and pool collection"
+    (let ((inst (cl-cc/vm:make-vm-const :dst :r1 :value :unrepresentable)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-a64-vm-const
+                  inst (lambda (word) (declare (ignore word)))))
+               "VM-CONST")
+              :to-be-truthy)
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::a64-instruction-size inst))
+               "VM-CONST")
+              :to-be-truthy)
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::a64-collect-literal-pool (list inst)))
+               "VM-CONST")
+              :to-be-truthy)))
   (it "loads an integer needing all 4 chunks via MOVZ + 3x MOVK"
     (expect (%collect-emitted-octets
              (lambda (sink)
                (cl-cc/codegen::emit-a64-vm-const
                 (cl-cc/vm:make-vm-const :dst :r1 :value #x0001000200030004) sink)))
-            :to-equalp #(#x81 #x00 #x80 #xD2   ; MOVZ X1, #4
-                         #x61 #x00 #xA0 #xF2   ; MOVK X1, #3, LSL #16
-                         #x41 #x00 #xC0 #xF2   ; MOVK X1, #2, LSL #32
+            :to-equalp #(#x81 #x00 #x80 #xD2
+                         #x61 #x00 #xA0 #xF2
+                         #x41 #x00 #xC0 #xF2
                          #x21 #x00 #xE0 #xF2)))) ; MOVK X1, #1, LSL #48
 
 (describe-sequential "aarch64-emitters.lisp: emit-a64-vm-move (skips MOV when dst == src)"
@@ -5586,3 +5764,407 @@ only owns the accumulation."
       (expect (cl-cc/vm:vm-rhs (second insts)) :to-be :r1)
       (expect (typep (third insts) (quote cl-cc/vm:vm-ret)) :to-be t)
       (expect (cl-cc/vm:vm-reg (third insts)) :to-be :r2))))
+
+(describe-sequential "native binary dispatch rejects unsupported instructions"
+  (it "x86-64 rejects deopt, OSR, and type-check instructions by name"
+    (dolist (inst (list (cl-cc/vm:make-vm-deopt :label "resume" :id 1)
+                        (cl-cc/vm:make-vm-osr-entry :label "loop" :id 2)
+                        (cl-cc/vm:make-vm-type-check
+                         :src :r0 :type-name 'integer :label "resume" :id 3)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-vm-instruction-with-labels
+                  inst (lambda (octet) (declare (ignore octet)))
+                  0 (make-hash-table)))
+               (string-upcase (symbol-name (type-of inst))))
+              :to-be-truthy)))
+
+  (it "AArch64 rejects VM-FUNC-REF, VM-PRINT, VM-CLOSURE, VM-TYPE-CHECK, VM-REGISTER-FUNCTION, and VM-SET-GLOBAL"
+    (dolist (inst (list (cl-cc/vm:make-vm-func-ref
+                         :dst :r1 :label "callee" :params nil)
+                        (cl-cc/vm:make-vm-print :reg :r0)
+                        (cl-cc/vm:make-vm-closure
+                         :dst :r0 :label "callee" :params nil)
+                        (cl-cc/vm:make-vm-type-check
+                         :src :r0 :type-name 'integer :label "resume" :id 1)
+                        (cl-cc/vm:make-vm-register-function :name 'callee :src :r0)
+                        (cl-cc/vm:make-vm-set-global :name 'global :src :r0)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-a64-instruction
+                  inst (lambda (word) (declare (ignore word)))
+                  0 (make-hash-table :test 'equal)))
+               (string-upcase (symbol-name (type-of inst))))
+              :to-be-truthy))))
+
+(describe-sequential "RISC-V dispatch rejects unsupported instructions"
+  (it "RISC-V rejects VM-PRINT, VM-CLOSURE, VM-REGISTER-FUNCTION, and VM-SET-GLOBAL by name"
+    (dolist (inst (list (cl-cc/vm:make-vm-print :reg :r0)
+                        (cl-cc/vm:make-vm-closure
+                         :dst :r0 :label "callee" :params nil)
+                        (cl-cc/vm:make-vm-register-function :name 'callee :src :r0)
+                        (cl-cc/vm:make-vm-set-global :name 'global :src :r0)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-riscv64-instruction
+                  inst (lambda (word) (declare (ignore word)))
+                  0 (make-hash-table :test 'equal)))
+               (string-upcase (symbol-name (type-of inst))))
+              :to-be-truthy)))
+
+  (it "rejects unsupported instructions during size calculation"
+    (expect (%codegen-error-names-p
+             (lambda ()
+               (cl-cc/codegen::riscv64-instruction-size
+                (cl-cc/vm:make-vm-prefetch :base-reg :r0 :index-reg :r1)))
+             "VM-PREFETCH")
+            :to-be-truthy))
+
+  (it "rejects select when Zicond is disabled"
+    (let* ((cl-cc/codegen::*riscv64-zicond-enabled* nil)
+           (inst (cl-cc/vm:make-vm-select
+                  :dst :a0 :cond-reg :t3 :then-reg :t1 :else-reg :t2)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-riscv64-vm-select
+                  inst (lambda (word) (declare (ignore word)))))
+               "VM-SELECT")
+              :to-be-truthy))))
+
+(describe-sequential "Wasm code generators reject unsupported or lossy instruction paths"
+  (it "WAT rejects unsupported VM-CONST literals without output"
+    (let* ((target (make-instance 'cl-cc/emit:wasm-target
+                                  :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1)))
+           (inst (cl-cc/vm:make-vm-const :dst :r0 :value (make-hash-table)))
+           (stream (make-string-output-stream)))
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::emit-instruction target inst stream))
+               "VM-CONST")
+              :to-be-truthy)
+      (expect (get-output-stream-string stream) :to-equal "")))
+
+  (it "WAT rejects jumps to labels absent from the function"
+    (dolist (case (list (list "VM-JUMP"
+                              (cl-cc/vm:make-vm-jump :label "missing"))
+                        (list "VM-JUMP-ZERO"
+                              (cl-cc/vm:make-vm-jump-zero
+                               :reg :r0 :label "missing"))))
+      (destructuring-bind (name inst) case
+        (let ((stream (make-string-output-stream)))
+          (expect (%codegen-error-names-p
+                   (lambda ()
+                     (cl-cc/codegen::emit-trampoline-instruction
+                      inst (make-hash-table :test 'equal)
+                      (cl-cc/codegen::make-wasm-reg-map-for-function 0)
+                      1 stream))
+                   name)
+                  :to-be-truthy)
+          (expect (get-output-stream-string stream) :to-equal "")))))
+
+  (it "direct WAT rejects missing function indices instead of using function zero"
+    (let* ((module (cl-cc/codegen::make-empty-wasm-module))
+           (target (make-instance 'cl-cc/emit:wasm-target
+                                  :module module
+                                  :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1))))
+      (dolist (case (list (list "VM-FUNC-REF"
+                                (cl-cc/vm:make-vm-func-ref
+                                 :dst :r0 :label "missing" :params nil))
+                          (list "VM-CLOSURE"
+                                (cl-cc/vm:make-vm-closure
+                                 :dst :r0 :label "missing" :params nil))))
+        (destructuring-bind (name inst) case
+          (let ((stream (make-string-output-stream)))
+            (expect (%codegen-error-names-p
+                     (lambda () (cl-cc/codegen::emit-instruction target inst stream))
+                     name)
+                    :to-be-truthy)
+            (expect (get-output-stream-string stream) :to-equal ""))))))
+
+  (it "trampoline WAT rejects unmapped VM-CLOSURE and VM-FUNC-REF targets"
+    (let ((cl-cc/codegen::*wasm-label-to-table-idx* (make-hash-table :test 'equal))
+          (reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1)))
+      (dolist (case (list (list "VM-CLOSURE"
+                                (cl-cc/vm:make-vm-closure
+                                 :dst :r0 :label "missing" :params nil))
+                          (list "VM-FUNC-REF"
+                                (cl-cc/vm:make-vm-func-ref
+                                 :dst :r0 :label "missing" :params nil))))
+        (destructuring-bind (name inst) case
+          (let ((stream (make-string-output-stream)))
+            (expect (%codegen-error-names-p
+                     (lambda ()
+                       (cl-cc/codegen::emit-trampoline-instruction
+                        inst (make-hash-table :test 'equal) reg-map 1 stream))
+                     name)
+                    :to-be-truthy)
+            (expect (get-output-stream-string stream) :to-equal ""))))))
+
+  (it "accepts a real function-table index of zero"
+    (let* ((module (cl-cc/codegen::make-empty-wasm-module))
+           (func (cl-cc/codegen::make-wasm-function-def
+                  :index 0 :wat-name "$callee"))
+           (target (make-instance 'cl-cc/emit:wasm-target
+                                  :module module
+                                  :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1)))
+           (stream (make-string-output-stream)))
+      (cl-cc/codegen::wasm-module-add-function module func)
+      (cl-cc/codegen::emit-instruction
+       target (cl-cc/vm:make-vm-func-ref :dst :r0 :label "callee" :params nil) stream)
+      (expect (> (length (get-output-stream-string stream)) 0) :to-be t)))
+
+  (it "rejects VM-REGISTER-FUNCTION instead of emitting a comment"
+    (let ((stream (make-string-output-stream)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-trampoline-instruction
+                  (cl-cc/vm:make-vm-register-function :name 'callee :src :r0)
+                  (make-hash-table :test 'equal)
+                  (cl-cc/codegen::make-wasm-reg-map-for-function 1)
+                  1 stream))
+               "VM-REGISTER-FUNCTION")
+              :to-be-truthy)
+      (expect (get-output-stream-string stream) :to-equal "")))
+
+  (it "rejects VM-MAKE-ARRAY options that are silently ignored"
+    (let* ((target (make-instance 'cl-cc/emit:wasm-target
+                                  :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 3)))
+           (inst (cl-cc/vm:make-vm-make-array
+                  :dst :r0 :size-reg :r1 :element-type-reg :r2))
+           (direct-stream (make-string-output-stream))
+           (trampoline-stream (make-string-output-stream)))
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::emit-instruction target inst direct-stream))
+               "VM-MAKE-ARRAY")
+              :to-be-truthy)
+      (expect (get-output-stream-string direct-stream) :to-equal "")
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-trampoline-instruction
+                  inst (make-hash-table :test 'equal)
+                  (cl-cc/codegen::make-wasm-reg-map-for-function 3)
+                  1 trampoline-stream))
+               "VM-MAKE-ARRAY")
+              :to-be-truthy)
+      (expect (get-output-stream-string trampoline-stream) :to-equal "")))
+
+  (it "rejects VM-GENERIC-CALL argument counts and operands it cannot marshal"
+    (let* ((target (make-instance 'cl-cc/emit:wasm-target
+                                  :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 3)))
+           (too-many (cl-cc/vm:make-vm-generic-call
+                      :dst :r0 :gf-reg :r1 :args (make-list 17 :initial-element :r2)))
+           (literal-arg (cl-cc/vm:make-vm-generic-call
+                         :dst :r0 :gf-reg :r1 :args '(literal))))
+      (dolist (case (list (list too-many "VM-GENERIC-CALL")
+                          (list literal-arg "VM-GENERIC-CALL")))
+        (destructuring-bind (inst error-name) case
+          (let ((stream (make-string-output-stream)))
+            (expect (%codegen-error-names-p
+                     (lambda () (cl-cc/codegen::emit-instruction target inst stream))
+                     error-name)
+                    :to-be-truthy)
+            (expect (get-output-stream-string stream) :to-equal ""))))))
+
+  (it "rejects VM-REGISTER-METHOD metadata forms it cannot represent"
+    (let* ((target (make-instance 'cl-cc/emit:wasm-target
+                                  :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 3)))
+           (inst (cl-cc/vm:make-vm-register-method
+                  :gf-reg :r0 :specializer '(eql 42) :qualifier nil :method-reg :r1))
+           (stream (make-string-output-stream)))
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::emit-instruction target inst stream))
+               "VM-REGISTER-METHOD")
+              :to-be-truthy)
+      (expect (get-output-stream-string stream) :to-equal "")))
+
+  (it "rejects staged class instructions that emit placeholder metadata"
+    (let* ((target (make-instance 'cl-cc/emit:wasm-target
+                                  :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 2)))
+           (instructions
+             (list (cl-cc/vm:make-vm-class-def
+                    :dst :r0 :class-name 'sample-class :slot-names '(slot))
+                   (cl-cc/vm:make-vm-find-class :dst :r0 :src :r1)
+                   (cl-cc/vm:make-vm-make-obj
+                    :dst :r0 :class-reg :r1 :initarg-regs nil))))
+      (dolist (inst instructions)
+        (let ((stream (make-string-output-stream)))
+          (expect (%codegen-error-names-p
+                   (lambda () (cl-cc/codegen::emit-instruction target inst stream))
+                   (string-upcase (symbol-name (type-of inst))))
+                  :to-be-truthy)
+          (expect (get-output-stream-string stream) :to-equal "")))))
+
+  (it "rejects exception-table rows with a local range and missing handler labels"
+    (let* ((start (cl-cc/vm:make-vm-const :dst :r0 :value 1))
+           (end (cl-cc/vm:make-vm-ret :reg :r0))
+           (entry (cl-cc/vm:make-vm-exception-entry 0 2 2 'condition :r1 0))
+           (pc->block (make-hash-table :test 'eql))
+           (label-pc-map (make-hash-table :test 'equal)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::%wasm-function-local-exception-table
+                  (list start end) (list start end) (vector entry)))
+               "VM-ESTABLISH-HANDLER")
+              :to-be-truthy)
+      (setf (gethash 0 pc->block) 0)
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::%wasm-eh-entry->block-entry
+                  (list :kind :handler :start-pc 0 :end-pc 1
+                        :handler-label "missing")
+                  pc->block label-pc-map))
+               "VM-ESTABLISH-HANDLER")
+              :to-be-truthy)))
+
+  (it "Wasm binary opcode lowering rejects unsupported VM instructions"
+    (expect (%codegen-error-names-p
+             (lambda ()
+               (cl-cc/codegen::wasm-encode-vm-instruction-opcode
+                (cl-cc/vm:make-vm-prefetch :base-reg :r0 :index-reg :r1)))
+             "VM-PREFETCH")
+            :to-be-truthy))
+
+  (it "Wasm binary opcode lowering rejects unsupported VM-CONST literals"
+    (expect (%codegen-error-names-p
+             (lambda ()
+               (cl-cc/codegen::wasm-encode-vm-instruction-opcode
+                (cl-cc/vm:make-vm-const :dst :r0 :value (make-hash-table))))
+             "VM-CONST")
+            :to-be-truthy))
+
+  (it "Wasm binary function-body lowering rejects nonempty VM source instructions"
+    (let ((func (cl-cc/codegen::make-wasm-function-def
+                 :wat-name "$source-body"
+                 :source-instructions
+                 (list (cl-cc/vm:make-vm-add :dst :r2 :lhs :r0 :rhs :r1)))))
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::wasm-binary-function-body-bytes func))
+               "VM-ADD")
+              :to-be-truthy)))
+
+  (it "Wasm binary lowering rejects a nonempty WAT body without source instructions"
+    (let ((func (cl-cc/codegen::make-wasm-function-def
+                 :wat-name "$body-only"
+                 :body '("(i32.const 1)"))))
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::wasm-binary-function-body-bytes func))
+               "I32.CONST 1")
+              :to-be-truthy))))
+
+(describe-sequential "Wasm trampoline rejects unsupported symbol constants"
+  (it "names VM-CONST instead of replacing a symbol literal with null"
+    (expect (%codegen-error-names-p
+             (lambda ()
+               (cl-cc/codegen::%wasm-const-value-to-wat (quote unsupported)))
+             "VM-CONST")
+            :to-be-truthy))
+
+  (it "names VM-CONST when the trampoline sees an unsupported literal"
+    (let* ((inst (cl-cc/vm:make-vm-const :dst :r0 :value (make-hash-table)))
+           (stream (make-string-output-stream)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-trampoline-instruction
+                  inst
+                  (make-hash-table :test (quote equal))
+                  (cl-cc/codegen::make-wasm-reg-map-for-function 1)
+                  1
+                  stream))
+               "VM-CONST")
+              :to-be-truthy)
+      (expect (get-output-stream-string stream) :to-equal "")))
+
+  (it "rethrows unhandled conditions out of the trampoline function"
+    (let* ((basic-blocks
+            (cl-cc/codegen::group-into-basic-blocks
+             (list (cl-cc/vm:make-vm-ret :reg :r0))))
+           (label-pc-map (cl-cc/codegen::build-label-pc-map basic-blocks))
+           (reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 1))
+           (stream (make-string-output-stream)))
+      (cl-cc/codegen::build-trampoline-body
+       basic-blocks label-pc-map reg-map nil stream)
+      (let ((wat (get-output-stream-string stream)))
+        (expect (search "(rethrow 0)" wat) :to-be-truthy)
+        (expect (search "(drop)" wat) :to-be nil)
+        (expect (search "exception recovery" wat) :to-be nil)))))
+
+(describe-sequential "native unsupported instructions fail by VM instruction name"
+  (it "x86-64 names VM-TYPE-CHECK instead of dropping its deopt behavior"
+    (expect (%codegen-error-names-p
+             (lambda ()
+               (cl-cc/codegen::emit-instruction
+                (make-instance (quote cl-cc/codegen:x86-64-target))
+                (cl-cc/vm:make-vm-type-check
+                 :src :r0 :type-name (quote integer) :label "resume" :id 1)
+                (make-string-output-stream)))
+             "VM-TYPE-CHECK")
+            :to-be-truthy))
+
+  (it "x86-64 rejects unsupported VM-CONST values during emission and sizing"
+    (let ((inst (cl-cc/vm:make-vm-const :dst :r0 :value :unsupported))
+          (bytes nil))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-vm-instruction-with-labels
+                  inst (lambda (octet) (push octet bytes))
+                  0 (make-hash-table :test 'equal)))
+               "VM-CONST")
+              :to-be-truthy)
+      (expect bytes :to-equal nil)
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::instruction-size inst))
+               "VM-CONST")
+              :to-be-truthy)))
+
+  (it "x86-64 errors when shadow-stack handler operations would be NOPs"
+    (let* ((cl-cc/codegen::*x86-64-shadow-stack-enabled* nil)
+           (inst (cl-cc/vm:make-vm-throw :tag-reg :r0 :value-reg :r1))
+           (bytes nil))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-vm-instruction-with-labels
+                  inst (lambda (octet) (push octet bytes))
+                  0 (make-hash-table :test 'equal)))
+               "VM-THROW")
+              :to-be-truthy)
+      (expect bytes :to-equal nil)
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::instruction-size inst))
+               "VM-THROW")
+              :to-be-truthy)))
+
+  (it "x86-64 rejects EH sites whose handler label is unresolved"
+    (let* ((cl-cc/codegen::*x86-64-shadow-stack-enabled* t)
+           (inst (cl-cc/vm:make-vm-push-handler
+                  :handler-type 'condition :handler-label "missing" :result-reg :r0)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::x86-64-build-landing-pad-table
+                  (list inst) (make-hash-table :test 'equal) 0))
+               "VM-PUSH-HANDLER")
+              :to-be-truthy)))
+
+  (it "x86-64 rejects missing instruction-size entries by name"
+    (dolist (inst (list (cl-cc/vm:make-vm-closure
+                         :dst :r0 :label "callee" :params nil)
+                        (cl-cc/vm:make-vm-type-check
+                         :src :r0 :type-name (quote integer) :label "resume" :id 1)))
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::instruction-size inst))
+               (string-upcase (symbol-name (type-of inst))))
+              :to-be-truthy)))
+
+  (it "RISC-V rejects unsupported VM-CONST values during emission and sizing"
+    (let ((inst (cl-cc/vm:make-vm-const :dst :a0 :value :unsupported))
+          (words nil))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-riscv64-instruction
+                  inst (lambda (word) (push word words))
+                  0 (make-hash-table :test 'equal)))
+               "VM-CONST")
+              :to-be-truthy)
+      (expect words :to-equal nil)
+      (expect (%codegen-error-names-p
+               (lambda () (cl-cc/codegen::riscv64-instruction-size inst))
+               "VM-CONST")
+              :to-be-truthy))))

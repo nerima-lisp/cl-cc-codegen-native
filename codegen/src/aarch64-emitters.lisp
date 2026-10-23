@@ -77,10 +77,7 @@
 (defun emit-a64-vm-const (inst stream)
   (let ((rd (a64-reg (vm-dst inst)))
         (value (let ((v (vm-value inst)))
-                 (cond ((integerp v) v)
-                       ((null v) 0)
-                       ((eq v t) 1)
-                       (t 0)))))
+                 (vm-const-to-integer v))))
     ;; Handle negative values via logical masking to 64-bit
     (emit-a64-mov-imm64 rd (logand value #xFFFFFFFFFFFFFFFF) stream)))
 
@@ -88,10 +85,7 @@
   "Emit VM-CONST at CURRENT-POS, using the active literal pool when profitable."
   (let* ((rd (a64-reg (vm-dst inst)))
          (value (logand (let ((v (vm-value inst)))
-                          (cond ((integerp v) v)
-                                ((null v) 0)
-                                ((eq v t) 1)
-                                (t 0)))
+                          (vm-const-to-integer v))
                         #xFFFFFFFFFFFFFFFF)))
     (if (and *current-a64-literal-pool* (a64-literal-pool-value-p value))
         (aarch64-emit-literal-reference rd value current-pos stream

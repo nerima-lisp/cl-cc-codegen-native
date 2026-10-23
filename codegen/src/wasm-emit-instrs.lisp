@@ -9,23 +9,17 @@
                      (wasm-fixnum-box (format nil "(i64.const ~D)" val)))
                     (null "(ref.null eq)")
                     ((eql t) "(ref.i31 (i32.const 1))")
-                     ;; FR-297: String literals emit native stringref values.
-                     (string
-                      (wasm-string-literal-wat val))
-                    ;; FR-297: Symbol literals — emit staged symbol objects
-                    (symbol
-                     (%wasm-symbol-literal-eqref val))
-                    ;; FR-297: Character literals — emit as char-code i31 ref
+                    ;; FR-297: String literals emit native stringref values.
+                    (string (wasm-string-literal-wat val))
+                    ;; FR-297: Symbol literals emit staged symbol objects.
+                    (symbol (%wasm-symbol-literal-eqref val))
+                    ;; FR-297: Character literals emit as char-code i31 refs.
                     (character
                      (format nil "(ref.i31 (i32.const ~D))" (char-code val)))
-                    ;; FR-297: Float literals — emit as f64.const + struct
-                     (float
-                      (%wasm-float-literal-eqref val))
-                     (vector
-                      (wasm-vector-literal-wat val))
-                    (t
-                     ;; Fallback for unsupported literal types
-                     "(ref.null eq)"))))
+                    ;; FR-297: Float literals emit as f64.const + struct.
+                    (float (%wasm-float-literal-eqref val))
+                    (vector (wasm-vector-literal-wat val))
+                    (t (error "Unsupported WASM VM-CONST literal: ~S" val)))))
     (format stream "~%    (local.set ~D ~A)"
             (wasm-reg-to-local reg-map dst)
             wat-val)
@@ -183,13 +177,15 @@ The host import $host_print_val takes a single eqref parameter."
                                                           (wasm-table-index-from-eqref-wat func-ref))))))))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-func-ref) stream)
-  "Materialize a closure for LABEL in DST and track a direct-call label hint."
+  "Materialize a closure for a function label present in the module table."
   (let* ((reg-map (wasm-target-reg-map target))
-          (module (wasm-target-module target))
-          (idx (or (and module (%wasm-function-index-for-label module (vm-label-name inst))) 0))
-          (dst (vm-dst inst)))
-    (setf (gethash dst (wasm-target-known-func-labels target))
-          (vm-label-name inst))
+         (module (wasm-target-module target))
+         (label (vm-label-name inst))
+         (idx (%wasm-function-index-for-label module label))
+         (dst (vm-dst inst)))
+    (unless (integerp idx)
+      (error "Unsupported WASM VM-FUNC-REF for unmapped function label ~S" label))
+    (setf (gethash dst (wasm-target-known-func-labels target)) label)
     (format stream "~%    ;; struct.new typeidx ~D; funcidx ~D"
             +type-idx-closure+ idx)
     (emit-wasm-closure-allocation reg-map dst idx nil stream 4)))
@@ -231,16 +227,19 @@ instead of lowering tail calls to ordinary calls."
                                            (wasm-table-index-from-eqref-wat func-ref)))))))))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-closure) stream)
-  (let ((reg-map (wasm-target-reg-map target)))
-    (let ((entry-idx (or (%wasm-function-index-for-label (wasm-target-module target)
-                                                          (vm-label-name inst))
-                          0)))
-      (setf (gethash (vm-dst inst) (wasm-target-known-func-labels target))
-            (vm-label-name inst))
-      (format stream "~%    ;; struct.new typeidx ~D; array.new typeidx ~D"
-              +type-idx-closure+ +type-idx-eqref-array+)
-      (emit-wasm-closure-allocation reg-map (vm-dst inst) entry-idx
-                                    (vm-captured-vars inst) stream 4))))
+  "Materialize a closure for a function label present in the module table."
+  (let* ((reg-map (wasm-target-reg-map target))
+         (label (vm-label-name inst))
+         (entry-idx (%wasm-function-index-for-label
+                     (wasm-target-module target) label))
+         (dst (vm-dst inst)))
+    (unless (integerp entry-idx)
+      (error "Unsupported WASM VM-CLOSURE for unmapped function label ~S" label))
+    (setf (gethash dst (wasm-target-known-func-labels target)) label)
+    (format stream "~%    ;; struct.new typeidx ~D; array.new typeidx ~D"
+            +type-idx-closure+ +type-idx-eqref-array+)
+    (emit-wasm-closure-allocation reg-map dst entry-idx
+                                  (vm-captured-vars inst) stream 4)))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-closure-ref-idx) stream)
   (let ((reg-map (wasm-target-reg-map target)))
@@ -260,23 +259,31 @@ instead of lowering tail calls to ordinary calls."
     (reg-record-type reg-map (vm-dst inst) :cons)))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-make-array) stream)
-  "Emit wasm-gc array allocation via array.new.
-
-Uses $eqref_array_t as the canonical mutable eqref array representation."
+  "Emit a fixed-size, one-dimensional Wasm GC array allocation."
+  (when (or (vm-dimensions-reg inst)
+            (vm-fill-pointer inst)
+            (vm-fill-pointer-reg inst)
+            (vm-adjustable inst)
+            (vm-adjustable-reg inst)
+            (vm-element-type-reg inst)
+            (vm-displaced-to-reg inst)
+            (vm-displaced-index-offset-reg inst)
+            (vm-copy-on-write inst)
+            (vm-copy-on-write-reg inst))
+    (error "Unsupported WASM VM-MAKE-ARRAY options: ~S" inst))
   (let* ((reg-map (wasm-target-reg-map target))
-         (kind (if (and *wasm-gc-array-types-enabled*
-                        (not (vm-element-type-reg inst)))
+         (kind (if *wasm-gc-array-types-enabled*
                    (wasm-normalize-array-element-kind (vm-element-type inst))
                    :eqref))
          (init (if (vm-initial-element inst)
                    (wasm-reg-to-array-element-wat reg-map (vm-initial-element inst) kind)
                    (wasm-array-default-wat kind)))
          (size (wasm-fixnum-unbox reg-map (vm-size-reg inst) :result-type :i32)))
-     (format stream "~%    ~A"
-             (reg-local-set reg-map (vm-dst inst)
-                            (wasm-array-new-wat kind init size
-                                                :default-p (null (vm-initial-element inst)))))
-     (wasm-array-reg-record-kind reg-map (vm-dst inst) kind)))
+    (format stream "~%    ~A"
+            (reg-local-set reg-map (vm-dst inst)
+                           (wasm-array-new-wat kind init size
+                                               :default-p (null (vm-initial-element inst)))))
+    (wasm-array-reg-record-kind reg-map (vm-dst inst) kind)))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-aref) stream)
   "Emit wasm-gc array element read via array.get."
@@ -408,7 +415,8 @@ Uses $eqref_array_t as the canonical mutable eqref array representation."
               (format stream "~%    ~A"
                       (reg-local-set reg-map dst
                                      (wasm-js-ref-box-wat "(call $js_host_object)")))
-              (format stream "~%    ;; FR-226 disabled or missing DST for vm-js-ref")))))))
+              (error "Unsupported WASM VM-JS-REF emission (externref enabled: ~S, destination: ~S)"
+                     *wasm-ref-types-externref-enabled* dst)))))))
 
 (defun %wasm-symbol-literal-eqref (sym)
   "Return wasm-gc eqref for a symbol literal SYM.
@@ -434,51 +442,47 @@ Current backend keeps symbol payload conservative (empty string, null value cell
 while preserving non-null symbol identity at the Wasm GC type level." 
   "(struct.new $symbol_t (struct.new $string_t (array.new $bytes_array_t (i32.const 0) (i32.const 0))) (ref.null eq))")
 
-(defun %wasm-reg-or-null-eqref (reg-map value)
-  "Return eqref for VALUE in staged Wasm lowering.
-
-- VM register keyword -> local reference
-- symbol literal -> staged symbol object
-- NIL/other literal -> `(ref.null eq)`" 
+(defun %wasm-register-method-value-eqref (value)
+  "Return the eqref for a supported literal VM-REGISTER-METHOD value."
   (cond
-    ((keywordp value)
-     (reg-local-ref reg-map value))
-    ((symbolp value)
-     (%wasm-empty-symbol-eqref))
-    (t
-     "(ref.null eq)")))
+    ((null value) "(ref.null eq)")
+    ((symbolp value) (%wasm-symbol-literal-eqref value))
+    (t (error "Unsupported WASM VM-REGISTER-METHOD value: ~S" value))))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-register-method) stream)
-  "Emit vm-register-method via staged runtime bridge import.
-
-This preserves explicit integration points for FR-321 while allowing wasm code
-to call into host/runtime generic-function registration." 
+  "Emit VM-REGISTER-METHOD when its metadata can be represented faithfully."
   (let* ((reg-map (wasm-target-reg-map target))
          (gf (reg-local-ref reg-map (vm-gf-reg inst)))
-         (specializer (%wasm-reg-or-null-eqref reg-map (vm-method-specializer inst)))
-         (qualifier (%wasm-reg-or-null-eqref reg-map (vm-method-qualifier inst)))
+         (specializer (%wasm-register-method-value-eqref
+                       (vm-method-specializer inst)))
+         (qualifier (%wasm-register-method-value-eqref
+                     (vm-method-qualifier inst)))
          (method (reg-local-ref reg-map (vm-method-reg inst))))
     (format stream "~%    (call $host_rt_register_method ~A ~A ~A ~A)"
             gf specializer qualifier method)))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-generic-call) stream)
-  "Emit vm-generic-call via staged runtime bridge import.
-
-Arguments are marshaled through the standard wasm calling-convention globals
-($cl_arg0..$cl_arg15) and passed with argc to the runtime bridge." 
-  (let ((reg-map (wasm-target-reg-map target)))
-    (let* ((args (vm-args inst))
-           (argc (min (length args) +wasm-max-call-args+)))
-      (loop for arg in args
-            for i from 0
-            while (< i +wasm-max-call-args+)
-            do (format stream "~%    (global.set $cl_arg~D ~A)" i
-                       (%wasm-reg-or-null-eqref reg-map arg)))
-      (format stream "~%    ~A"
-              (reg-local-set reg-map (vm-dst inst)
-                             (format nil "(call $host_rt_call_generic ~A (i32.const ~D))"
-                                     (reg-local-ref reg-map (vm-gf-reg inst))
-                                     argc))))))
+  "Emit vm-generic-call through the staged runtime bridge."
+  (let* ((reg-map (wasm-target-reg-map target))
+         (args (vm-args inst))
+         (argc (length args)))
+    (when (> argc +wasm-max-call-args+)
+      (error "Unsupported WASM VM-GENERIC-CALL with ~D arguments (maximum is ~D)"
+             argc +wasm-max-call-args+))
+    (loop for arg in args
+          for i from 0
+          unless (keywordp arg)
+            do (error "Unsupported WASM VM-GENERIC-CALL argument ~D: expected a register, got ~S"
+                      i arg))
+    (loop for arg in args
+          for i from 0
+          do (format stream "~%    (global.set $cl_arg~D ~A)"
+                     i (reg-local-ref reg-map arg)))
+    (format stream "~%    ~A"
+            (reg-local-set reg-map (vm-dst inst)
+                           (format nil "(call $host_rt_call_generic ~A (i32.const ~D))"
+                                   (reg-local-ref reg-map (vm-gf-reg inst))
+                                   argc)))))
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-car) stream)
   (let ((reg-map (wasm-target-reg-map target)))

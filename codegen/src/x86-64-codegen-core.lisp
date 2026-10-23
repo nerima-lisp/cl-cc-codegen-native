@@ -52,8 +52,12 @@ branch is encoded as rel8.")
              (push-r64-byte-size (x86-64-shrink-save-reg inst)))
             (x86-64-shrink-restore
              (pop-r64-byte-size (x86-64-shrink-restore-reg inst)))
-            (vm-const
-             (if (floatp (vm-value inst)) 15 10))
+            (vm-const (let ((value (vm-value inst)))
+                         (if (floatp value)
+                             15
+                             (progn
+                               (vm-const-to-integer value)
+                               10))))
             (vm-move
              (if (or (x86-64-float-vreg-p (vm-dst inst))
                      (x86-64-float-vreg-p (vm-src inst)))
@@ -167,8 +171,14 @@ branch is encoded as rel8.")
                              "vm-establish-catch"
                              "vm-throw")
                             :test #'string=)
-                    (if *x86-64-shadow-stack-enabled* 6 2)
-                     (or (x86-64-dynamic-instruction-size inst) 0)))))))
+                    (if *x86-64-shadow-stack-enabled*
+                         6
+                         (error "Unsupported x86-64 instruction: ~A requires shadow-stack support"
+                                (type-of inst)))
+                     (if (eq (type-of inst) 'cl-cc/optimize::opt-vm-path-profile-record)
+                       0
+                       (or (x86-64-dynamic-instruction-size inst)
+                           (error "Unsupported x86-64 instruction: ~A" (type-of inst))))))))))
     (+ base-size
        (if (and (fboundp 'sanitizer-instrumentation-size)
                 (or (and (boundp '*asan-instrumentation-enabled*)

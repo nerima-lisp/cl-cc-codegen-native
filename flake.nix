@@ -67,11 +67,8 @@
       url = "github:nerima-lisp/cl-parser-kit/v1.1.1";
       flake = false;
     };
-    # v2.0.0's own dependency chain is cl-date-kit, cl-concurrent-kit and
-    # cl-host-kit (declared below) -- discovered one at a time as real ASDF
-    # MISSING-DEPENDENCY build failures, not read off cl-log-kit.asd in
-    # advance, so this is exactly the source registry v2.0.0 actually needs
-    # and no more.
+    # These inputs satisfy cl-log-kit v2.2.0's ASDF dependencies; the shared
+    # source registry below makes each system discoverable to ASDF.
     cl-log-kit = {
       url = "github:nerima-lisp/cl-log-kit/v2.2.0";
       flake = false;
@@ -92,8 +89,6 @@
       url = "github:nerima-lisp/cl-boundary-kit/v2.3.0";
       flake = false;
     };
-    # cl-log-kit v2.0.0's own dependencies, needed for it to resolve through
-    # this repository's source registry.
     cl-date-kit = {
       url = "github:nerima-lisp/cl-date-kit/v1.1.1";
       flake = false;
@@ -114,22 +109,15 @@
       url = "github:nerima-lisp/cl-tty-kit/v1.6.1";
       flake = false;
     };
-    # Pinned to a release tag. A bare `github:nerima-lisp/cl-weave` follows
-    # that repository's default branch, so an upstream push to main would
-    # break this repository's CI without warning. This used to be a
-    # `flake = false` source tree handed to the runner through an environment
-    # variable; it is a normal flake input now, which is what lets ASDF find
-    # cl-weave through CL_SOURCE_REGISTRY like any other dependency.
+    # Pin a release because a bare GitHub reference follows the default branch.
+    # As a flake input, cl-weave is available to ASDF through CL_SOURCE_REGISTRY.
     cl-weave = {
       url = "github:nerima-lisp/cl-weave/v1.4.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # The same structural-refactoring CLI the AI-driven changes in this
-    # repository are made with (see AGENTS.md / the paredit-cli skill). Its
-    # `mkLintCheck` becomes `checks.paredit-lint` below: a parse-balance gate
-    # over every .lisp/.asd file, independent of and much cheaper than
-    # actually compiling them.
+    # `mkLintCheck` provides `checks.paredit-lint`: a parse-balance gate over
+    # every .lisp/.asd file, separate from and cheaper than compiling them.
     paredit-cli = {
       url = "github:nerima-lisp/paredit-cli/v1.6.3";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -181,7 +169,7 @@
       # Consequence, accepted deliberately: every per-system output -- packages,
       # checks, apps AND devShells -- is generated from this one list, so
       # `nix develop` and `nix build` no longer work on macOS. Development
-      # happens on Linux. See PACKAGE_STANDARD.md, section "systems".
+      # happens on Linux.
       systems = [
         "x86_64-linux"
       ];
@@ -207,11 +195,8 @@
         builtins.head (builtins.match "[[:space:]]*:version \"([^\"]*)\"" versionLine);
 
       # treefmt drives `nix fmt` and the `checks.<system>.formatting` gate.
-      # Scope is Nix only: nixfmt (RFC-style) is a zero-footgun, low-diff
-      # formatter, whereas YAML formatters mangle the GitHub Actions `on:`
-      # key and there is no docs/ tree here to justify a Markdown formatter
-      # either. Mirrors sibling repos' flake.nix, which keep the same Nix-only
-      # scope despite also having .github/workflows.
+      # YAML stays out because YAML formatters can rewrite GitHub Actions'
+      # `on:` key; MkDocs validates docs with a strict build.
       treefmtEval = forAllSystems (
         system:
         treefmt-nix.lib.evalModule nixpkgs.legacyPackages.${system} {
@@ -303,6 +288,124 @@
           # Fails `nix flake check` when any tracked file is unformatted,
           # turning the formatter into an enforced CI gate.
           formatting = treefmtEval.${system}.config.build.check self;
+
+          orphan-tests =
+            pkgs.runCommand "cl-cc-codegen-native-orphan-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.sbcl
+                  pkgs.coreutils
+                  pkgs.findutils
+                ];
+                CL_SOURCE_REGISTRY = sourceRegistry;
+              }
+              ''
+                set -eu
+
+                export HOME="$TMPDIR/home"
+                mkdir -p "$HOME" "$out"
+                source_root="${self}"
+
+                find "$source_root" -type f -name '*.asd' -print | sort > "$TMPDIR/asd-files"
+                # Treat test-named Lisp files and files under `t` or other
+                # test-named directories as candidates.
+                find "$source_root" -type f -name '*.lisp' -print \
+                  | awk -v root="$source_root/" '
+                      {
+                        relative = substr($0, length(root) + 1)
+                        count = split(relative, parts, "/")
+                        candidate = tolower(parts[count]) ~ /test/
+                        for (i = 1; i < count; i++) {
+                          directory = tolower(parts[i])
+                          if (directory == "t" || directory ~ /test/) candidate = 1
+                        }
+                        if (candidate) print relative
+                      }
+                    ' \
+                  | sort -u > "$TMPDIR/candidates"
+
+                asd_count="$(wc -l < "$TMPDIR/asd-files")"
+                candidate_count="$(wc -l < "$TMPDIR/candidates")"
+                if [ "$asd_count" -eq 0 ]; then
+                  echo "No local ASDF systems found" >&2
+                  exit 1
+                fi
+                if [ "$candidate_count" -eq 0 ]; then
+                  echo "No test or test-support Lisp files found" >&2
+                  exit 1
+                fi
+
+                cat > "$TMPDIR/orphan-tests.lisp" <<'LISP'
+                (require :asdf)
+
+                (defvar *orphan-source-root*
+                  (uiop:ensure-directory-pathname
+                   (truename (uiop:getenv "ORPHAN_SOURCE_ROOT"))))
+                (defvar *orphan-loaded-files* nil)
+                (defvar *orphan-test-op-systems* nil)
+
+                (defun orphan-relative-path (pathname)
+                  (let ((root (namestring *orphan-source-root*))
+                        (file (namestring (truename pathname))))
+                    (when (and (>= (length file) (length root))
+                               (string= root file :end2 (length root)))
+                      (subseq file (length root)))))
+
+                (defmethod asdf:perform :around
+                    ((operation asdf:load-op) (component asdf:component))
+                  (declare (ignore operation))
+                  (let ((pathname (ignore-errors (asdf:component-pathname component))))
+                    (when (and pathname (probe-file pathname))
+                      (let ((relative (orphan-relative-path pathname)))
+                        (when relative
+                          (pushnew relative *orphan-loaded-files* :test #'string=)))))
+                  (call-next-method)))
+
+                ;; The default check executes suites; this check only tracks ASDF loading.
+                (defmethod asdf:perform :around
+                    ((operation asdf:test-op) (component asdf:component))
+                  (pushnew (asdf:component-name component) *orphan-test-op-systems*
+                           :test #'equal)
+                  nil)
+
+                (with-open-file (systems (uiop:getenv "ORPHAN_ASD_FILES"))
+                  (loop for asd = (read-line systems nil nil)
+                        while asd
+                        do (asdf:load-asd asd)
+                           (asdf:test-system (pathname-name asd))))
+
+                (with-open-file (output (uiop:getenv "ORPHAN_LOADED_FILES")
+                                        :direction :output :if-exists :supersede)
+                  (dolist (path (sort *orphan-loaded-files* #'string<))
+                    (format output "~a~%" path)))
+                (with-open-file (output (uiop:getenv "ORPHAN_TEST_OP_SYSTEMS")
+                                        :direction :output :if-exists :supersede)
+                  (dolist (name (sort *orphan-test-op-systems* #'string<))
+                    (format output "~a~%" name)))
+                (uiop:quit 0)
+                LISP
+
+                export ORPHAN_SOURCE_ROOT="$source_root"
+                export ORPHAN_ASD_FILES="$TMPDIR/asd-files"
+                export ORPHAN_LOADED_FILES="$TMPDIR/loaded-files"
+                export ORPHAN_TEST_OP_SYSTEMS="$TMPDIR/test-op-systems"
+                sbcl --script "$TMPDIR/orphan-tests.lisp"
+
+                sort -u "$TMPDIR/loaded-files" -o "$TMPDIR/loaded-files"
+                comm -23 "$TMPDIR/candidates" "$TMPDIR/loaded-files" > "$TMPDIR/orphans"
+                loaded_count="$(comm -12 "$TMPDIR/candidates" "$TMPDIR/loaded-files" | wc -l)"
+                orphan_count="$(wc -l < "$TMPDIR/orphans")"
+                test_system_count="$(wc -l < "$TMPDIR/test-op-systems")"
+                echo "Test/test-support Lisp candidates: $candidate_count"
+                echo "Candidates loaded by ASDF test systems: $loaded_count"
+                echo "ASDF test-op systems observed (execution skipped): $test_system_count"
+                if [ "$orphan_count" -gt 0 ]; then
+                  echo "Orphan test files:" >&2
+                  cat "$TMPDIR/orphans" >&2
+                  exit 1
+                fi
+                touch "$out/passed"
+              '';
 
           # The docs package builds with `mkdocs --strict`, so a broken link or
           # a page missing from the nav fails the build. Without this the docs

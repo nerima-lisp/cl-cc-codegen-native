@@ -169,7 +169,13 @@ in place of the corresponding control characters."
               :high-pc high
               :subprograms (mapcar #'%wasm-dwarf-subprogram-for-func functions)
               :lines (%wasm-dwarf-lines-for-module module))))
-    (cl-cc/binary::build-dwarf-section-alist cu)))
+    (let ((sections (cl-cc/binary:build-dwarf-debug-sections cu)))
+      (list
+       (cons ".debug_info" (cl-cc/binary::dwarf-debug-sections-info sections))
+       (cons ".debug_abbrev" (cl-cc/binary::dwarf-debug-sections-abbrev sections))
+       (cons ".debug_line" (cl-cc/binary::dwarf-debug-sections-line sections))
+       (cons ".debug_str" (cl-cc/binary::dwarf-debug-sections-str sections))
+       (cons ".debug_loc" (cl-cc/binary::dwarf-debug-sections-loc sections))))))
 
 (defun emit-wasm-dwarf-sections (module stream)
   "FR-222: Emit DWARF 5 debug info as Wasm custom sections.

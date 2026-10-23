@@ -28,7 +28,7 @@
       flake = false;
     };
     cl-cc-type = {
-      url = "github:nerima-lisp/cl-cc-type/adf449080c07dea93bd7947f51b6eba8277a7bf6";
+      url = "github:nerima-lisp/cl-cc-type/ff2e742911b4b193457a75208b7b9ad6b06ab23a";
       flake = false;
     };
     cl-cc-bootstrap = {
@@ -48,15 +48,15 @@
     # cl-cc-target input any more -- both systems come from this one source
     # tree via CL_SOURCE_REGISTRY below.
     cl-cc-mir = {
-      url = "github:nerima-lisp/cl-cc-mir/9679e3a471df1bea446df9b22cb26a32e85c42c8";
+      url = "github:nerima-lisp/cl-cc-mir/663c4c01c800ca7e64d444c53204645173e84854";
       flake = false;
     };
     cl-cc-binary = {
-      url = "github:nerima-lisp/cl-cc-binary/b70205834e711181bd2c2ec0299bd5c3ab5e0673";
+      url = "github:nerima-lisp/cl-cc-binary/4c0661c1b2e22be5f28277b0d563eea6651c51e3";
       flake = false;
     };
     cl-cc-optimize = {
-      url = "github:nerima-lisp/cl-cc-optimize/51c0db63ff125413568ec08c79e33dcf34f00fbf";
+      url = "github:nerima-lisp/cl-cc-optimize/f6cd93f54b4e04083aad0f3fee30def14a427f89";
       flake = false;
     };
     cl-prolog-kit = {

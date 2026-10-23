@@ -359,7 +359,7 @@
                       (let ((relative (orphan-relative-path pathname)))
                         (when relative
                           (pushnew relative *orphan-loaded-files* :test #'string=)))))
-                  (call-next-method)))
+                  (call-next-method))
 
                 ;; The default check executes suites; this check only tracks ASDF loading.
                 (defmethod asdf:perform :around

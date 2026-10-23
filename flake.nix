@@ -24,7 +24,7 @@
     # Re-resolve before bumping, and do not copy a SHA you have not resolved:
     #   gh api repos/nerima-lisp/<name>/commits/main --jq .sha
     cl-cc-ast = {
-      url = "github:nerima-lisp/cl-cc-ast/ad554c7a7401cdf454707eb56a37da6aaaea2a95";
+      url = "github:nerima-lisp/cl-cc-ast/a45c5acecfccb91a43f6a04251e8a5d6ec3d3213";
       flake = false;
     };
     cl-cc-type = {
@@ -32,15 +32,15 @@
       flake = false;
     };
     cl-cc-bootstrap = {
-      url = "github:nerima-lisp/cl-cc-bootstrap/821bc1f853dbdad2a66e852216d651a7deee5ad2";
+      url = "github:nerima-lisp/cl-cc-bootstrap/027f6c9826010c15789454e69abd2930738b50af";
       flake = false;
     };
     cl-cc-runtime = {
-      url = "github:nerima-lisp/cl-cc-runtime/e47f0917abc759f4798633cfa427f30ad08eb277";
+      url = "github:nerima-lisp/cl-cc-runtime/d23ea44512b162def39ec981426c4c8e1af4df84";
       flake = false;
     };
     cl-cc-vm = {
-      url = "github:nerima-lisp/cl-cc-vm/4508154e0a170c2dc7647825f7b41741e1de1ff7";
+      url = "github:nerima-lisp/cl-cc-vm/462213fcf5e0e6cecc09992e8cb0b7ed48dbce2f";
       flake = false;
     };
     # Also provides cl-cc-target (folded in 2026-08-01: the two were always

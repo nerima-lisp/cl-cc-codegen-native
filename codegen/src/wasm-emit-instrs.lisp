@@ -372,7 +372,7 @@ Uses $eqref_array_t as the canonical mutable eqref array representation."
   `(defmethod emit-instruction ((target wasm-target) (inst ,class) stream)
      (let ((reg-map (wasm-target-reg-map target)))
        (unless (maybe-emit-wasm-string-instruction inst reg-map stream :indent 4)
-         (format stream "~%    ;; UNSUPPORTED Wasm string instruction: ~A" (type-of inst))))))
+         (error "Unsupported WASM string instruction: ~A" (type-of inst))))))
 
 (define-wasm-string-emit-method vm-concatenate)
 (define-wasm-string-emit-method vm-string=)

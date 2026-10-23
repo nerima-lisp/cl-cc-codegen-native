@@ -1,19 +1,17 @@
-;;;; packages/emit/src/wasm-trampoline.lisp - PC-Dispatch Trampoline Builder
+;;;; codegen/src/wasm-trampoline.lisp - PC-Dispatch Trampoline Infrastructure
 ;;;
-;;; Converts a flat list of VM instructions (a function body) into a WAT
-;;; body using a PC-dispatch trampoline: loop { block { br_table } }.
-;;; This bridges the VM's flat label-jump model to WASM structured control flow.
+;;; Groups VM instructions by label and maps labels to PC indices for the
+;;; PC-dispatch trampoline: loop { block { br_table } }.
 ;;;
 ;;; Basic-block/label infrastructure, atomic lowering policy, and the
 ;;; register-map local get/set + FR-142 type-tracking primitives that the
-;;; rest of the trampoline (and wasm-trampoline-gc.lisp,
-;;; wasm-trampoline-fixnum.lisp, wasm-trampoline-proposals.lisp — split out
-;;; in 2026-07, all in this same package) build on.
+;;; rest of the trampoline and wasm-trampoline-gc.lisp,
+;;; wasm-trampoline-fixnum.lisp, and wasm-trampoline-proposals.lisp build on.
 
 (in-package :cl-cc/codegen)
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
-;;; Step 1: Group instructions into basic blocks by label
+;;; Group instructions into basic blocks by label
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (defstruct (wasm-basic-block (:conc-name wasm-bb-))
@@ -48,7 +46,7 @@
     (nreverse blocks)))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
-;;; Step 2: Build a label -> pc-index map
+;;; Build a label -> pc-index map
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
 (defun build-label-pc-map (basic-blocks)
@@ -90,12 +88,8 @@
      ,@body))
 
 ;;; ─────────────────────────────────────────────────────────────────────────────
-;;; Step 3: Emit WAT for a single instruction
+;;; WAT register and type-tracking helpers
 ;;; ─────────────────────────────────────────────────────────────────────────────
-;;; Returns T if instruction was handled, NIL if not supported (emits comment).
-;;; REG-MAP is a wasm-reg-map for mapping :R0 etc. to local indices.
-;;; LABEL-PC-MAP maps label names to pc-index integers.
-;;; NUM-BLOCKS is total number of basic blocks.
 
 (defun reg-local-ref (reg-map reg)
   "Return WAT for getting a register's local variable, e.g. '(local.get 3)'."
@@ -103,7 +97,7 @@
 
 (defun reg-local-set (reg-map reg value-wat)
   "Return WAT for setting a register's local variable.
-   Also clears any known type for the destination register (FR-142)."
+   Also clears known type, fixnum-range, and array-element metadata for REG."
   (let ((known-types (wasm-reg-map-known-types reg-map)))
     (when known-types (remhash reg known-types)))
   (let ((ranges (wasm-reg-map-fixnum-ranges reg-map)))
@@ -134,6 +128,5 @@
     (and known-types (gethash reg known-types))))
 
 (defun reg-clear-type (reg-map reg)
-  "Clear any known type for VM register REG."
   (let ((known-types (wasm-reg-map-known-types reg-map)))
     (when known-types (remhash reg known-types))))

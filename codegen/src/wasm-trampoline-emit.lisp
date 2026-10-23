@@ -1,9 +1,7 @@
-;;;; packages/emit/src/wasm-trampoline-emit.lisp — WASM Trampoline Instruction Emitter
+;;;; codegen/src/wasm-trampoline-emit.lisp — WASM Trampoline Instruction Emitter
 ;;;;
 ;;;; Data tables: wasm-trampoline-tables.lisp (loads before this file).
 ;;;; Program builder: wasm-trampoline-build.lisp (loads after this file).
-;;;;
-;;;; Load order: after wasm-trampoline-tables.lisp.
 
 (in-package :cl-cc/codegen)
 
@@ -113,7 +111,7 @@ tree emission on NIL."
 
 (defun emit-trampoline-instruction (inst label-pc-map reg-map num-blocks stream)
   "Emit WAT text for a single VM instruction to STREAM.
-   Returns T if instruction was handled, NIL otherwise (emits warn comment)."
+   Returns T when handled and signals an error for unsupported instructions."
   (declare (ignore num-blocks))
   (let ((tp (type-of inst)))
     ;; FR-285: CL EQ/EQL over GC references uses ref.eq; known i31 fixnums keep
@@ -185,14 +183,12 @@ tree emission on NIL."
   ;; FR-218/FR-295/FR-320: native Wasm string builtins.
   (when (maybe-emit-wasm-string-instruction inst reg-map stream :indent 6)
     (return-from emit-trampoline-instruction t))
-  ;; Remaining instructions handled by typecase (unique logic per instruction)
   (typecase inst
     (vm-const
      (let ((val (vm-value inst)))
        (format stream "~%      ~A"
                (reg-local-set reg-map (vm-dst inst)
                               (%wasm-const-value-to-wat val)))
-         ;; FR-209: Record type/range info for integer constants (known i31ref)
          (typecase val
            (integer (reg-record-fixnum-range reg-map (vm-dst inst) (cons val val)))
            (vector  (wasm-array-reg-record-kind reg-map (vm-dst inst)
@@ -289,7 +285,6 @@ tree emission on NIL."
                              (format nil "(struct.new $cons_t ~A ~A)"
                                      (reg-local-ref reg-map (vm-car-reg inst))
                                      (reg-local-ref reg-map (vm-cdr-reg inst)))))
-      ;; FR-142: Record that dst now holds a $cons_t reference
       (reg-record-type reg-map (vm-dst inst) :cons)
       t)
      (vm-closure
@@ -475,8 +470,7 @@ tree emission on NIL."
      t)
      (vm-call
        (let* ((args (vm-args inst))
-              (func-local (reg-local-ref reg-map (vm-func-reg inst)))
-             (dst-idx (wasm-reg-to-local reg-map (vm-dst inst)))
+              (dst-idx (wasm-reg-to-local reg-map (vm-dst inst)))
              ;; FR-142: Use wasm-ref-cast-maybe to skip ref.cast when type is known
               (entry-idx-wat (format nil
                                      "(struct.get $closure_t 0 ~A)"
@@ -534,7 +528,6 @@ tree emission on NIL."
                   (reg-local-ref reg-map (vm-error-reg inst))))
       t)
     (vm-throw
-      ;; FR-204: General throw with tag and value
       (format stream "~%      ;; throw tagidx ~D" +tag-idx-cl-condition+)
       (format stream "~%      (throw $cl_condition_tag ~A ~A)"
               (reg-local-ref reg-map (vm-throw-tag-reg inst))
@@ -555,5 +548,4 @@ tree emission on NIL."
                                             "(ref.null eq)")))
      t)
     (t
-     (format stream "~%      ;; UNSUPPORTED: ~A" (type-of inst))
-     nil)))
+     (error "Unsupported WASM instruction: ~A" (type-of inst)))))

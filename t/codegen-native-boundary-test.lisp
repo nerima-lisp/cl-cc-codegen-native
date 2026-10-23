@@ -135,7 +135,7 @@
                             target :object (quote missing)))))
         (signals error (funcall lookup))))))
 
-(describe-sequential "WASM float arithmetic fails closed"
+(describe-sequential "WASM emission rejects unsupported instructions"
   (it "rejects all float arithmetic in text and binary lowering"
     (let ((target (make-instance (quote cl-cc/emit:wasm-target))))
       (dolist (constructor (quote (cl-cc/vm:make-vm-float-add
@@ -147,7 +147,29 @@
             (cl-cc/codegen::emit-instruction
              target inst (make-string-output-stream)))
           (signals error
-            (cl-cc/codegen::wasm-encode-vm-instruction-opcode inst)))))))
+            (cl-cc/codegen::wasm-encode-vm-instruction-opcode inst))))))
+
+  (it "rejects and names an unsupported VM instruction without emitting output"
+    (let* ((inst (cl-cc/vm:make-vm-prefetch :base-reg :r0 :index-reg :r1))
+           (target (make-instance (quote cl-cc/emit:wasm-target)))
+           (emitters
+             (list
+              (lambda (stream)
+                (cl-cc/codegen::emit-instruction target inst stream))
+              (lambda (stream)
+                (cl-cc/codegen::emit-trampoline-instruction
+                 inst (make-hash-table)
+                 (cl-cc/codegen::make-wasm-reg-map-for-function 0)
+                 1 stream)))))
+      (dolist (emit emitters)
+        (let* ((stream (make-string-output-stream))
+               (condition
+                 (handler-case
+                     (progn (funcall emit stream) nil)
+                   (error (caught) caught))))
+          (expect condition :to-be-truthy)
+          (expect (search "VM-PREFETCH" (princ-to-string condition)) :to-be-truthy)
+          (expect (get-output-stream-string stream) :to-equal ""))))))
 
 
 (defun %collect-emitted-octets (invoke-emitter)

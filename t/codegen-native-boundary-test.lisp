@@ -5586,3 +5586,7 @@ only owns the accumulation."
       (expect (cl-cc/vm:vm-rhs (second insts)) :to-be :r1)
       (expect (typep (third insts) (quote cl-cc/vm:vm-ret)) :to-be t)
       (expect (cl-cc/vm:vm-reg (third insts)) :to-be :r2))))
+
+(describe-sequential "W2-18 failure propagation control"
+  (it "fails the registered test system on a failing assertion"
+    (expect nil :to-be-truthy)))

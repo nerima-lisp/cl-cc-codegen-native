@@ -307,14 +307,15 @@
                 source_root="${self}"
 
                 find "$source_root" -type f -name '*.asd' -print | sort > "$TMPDIR/asd-files"
-                # Treat test-named Lisp files and files under `t` or other
-                # test-named directories as candidates.
+                # The root run-tests.lisp is the test entrypoint invoked by the default check.
+                # This gate tracks ASDF-loaded test sources, not entrypoint scripts.
                 find "$source_root" -type f -name '*.lisp' -print \
                   | awk -v root="$source_root/" '
                       {
                         relative = substr($0, length(root) + 1)
                         count = split(relative, parts, "/")
-                        candidate = tolower(parts[count]) ~ /test/
+                        candidate = tolower(parts[count]) ~ /test/ &&
+                                    tolower(relative) != "run-tests.lisp"
                         for (i = 1; i < count; i++) {
                           directory = tolower(parts[i])
                           if (directory == "t" || directory ~ /test/) candidate = 1

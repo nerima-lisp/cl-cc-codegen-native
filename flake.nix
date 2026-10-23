@@ -342,7 +342,7 @@
                   (uiop:ensure-directory-pathname
                    (truename (uiop:getenv "ORPHAN_SOURCE_ROOT"))))
                 (defvar *orphan-loaded-files* nil)
-                (defvar *orphan-test-op-systems* nil)
+                (defvar *orphan-test-named-systems* nil)
 
                 (defun orphan-relative-path (pathname)
                   (let ((root (namestring *orphan-source-root*))
@@ -361,26 +361,33 @@
                           (pushnew relative *orphan-loaded-files* :test #'string=)))))
                   (call-next-method))
 
-                ;; The default check executes suites; this check only tracks ASDF loading.
-                (defmethod asdf:perform :around
-                    ((operation asdf:test-op) (component asdf:component))
-                  (pushnew (asdf:component-name component) *orphan-test-op-systems*
-                           :test #'equal)
-                  nil)
-
                 (with-open-file (systems (uiop:getenv "ORPHAN_ASD_FILES"))
                   (loop for asd = (read-line systems nil nil)
                         while asd
-                        do (asdf:load-asd asd)
-                           (asdf:test-system (pathname-name asd))))
+                        do (asdf:load-asd asd)))
+
+                ;; Load local ASDF systems whose names contain "test"; the default check runs test-op.
+                (let ((test-named-systems
+                        (loop for name in (asdf:registered-systems)
+                              for system = (asdf:find-system name nil)
+                              for source = (and system (asdf:system-source-file system))
+                              when (and source
+                                        (search "test" name :test #'char-equal)
+                                        (orphan-relative-path source))
+                                collect name)))
+                  (when (null test-named-systems)
+                    (error "No local ASDF system names containing test found"))
+                  (dolist (name (sort test-named-systems #'string<))
+                    (asdf:load-system name)
+                    (pushnew name *orphan-test-named-systems* :test #'equal)))
 
                 (with-open-file (output (uiop:getenv "ORPHAN_LOADED_FILES")
                                         :direction :output :if-exists :supersede)
                   (dolist (path (sort *orphan-loaded-files* #'string<))
                     (format output "~a~%" path)))
-                (with-open-file (output (uiop:getenv "ORPHAN_TEST_OP_SYSTEMS")
+                (with-open-file (output (uiop:getenv "ORPHAN_TEST_NAMED_SYSTEMS")
                                         :direction :output :if-exists :supersede)
-                  (dolist (name (sort *orphan-test-op-systems* #'string<))
+                  (dolist (name (sort *orphan-test-named-systems* #'string<))
                     (format output "~a~%" name)))
                 (uiop:quit 0)
                 LISP
@@ -388,17 +395,17 @@
                 export ORPHAN_SOURCE_ROOT="$source_root"
                 export ORPHAN_ASD_FILES="$TMPDIR/asd-files"
                 export ORPHAN_LOADED_FILES="$TMPDIR/loaded-files"
-                export ORPHAN_TEST_OP_SYSTEMS="$TMPDIR/test-op-systems"
+                export ORPHAN_TEST_NAMED_SYSTEMS="$TMPDIR/test-named-systems"
                 sbcl --script "$TMPDIR/orphan-tests.lisp"
 
                 sort -u "$TMPDIR/loaded-files" -o "$TMPDIR/loaded-files"
                 comm -23 "$TMPDIR/candidates" "$TMPDIR/loaded-files" > "$TMPDIR/orphans"
                 loaded_count="$(comm -12 "$TMPDIR/candidates" "$TMPDIR/loaded-files" | wc -l)"
                 orphan_count="$(wc -l < "$TMPDIR/orphans")"
-                test_system_count="$(wc -l < "$TMPDIR/test-op-systems")"
+                test_named_system_count="$(wc -l < "$TMPDIR/test-named-systems")"
                 echo "Test/test-support Lisp candidates: $candidate_count"
-                echo "Candidates loaded by ASDF test systems: $loaded_count"
-                echo "ASDF test-op systems observed (execution skipped): $test_system_count"
+                echo "Candidates loaded by local ASDF systems with test in the name: $loaded_count"
+                echo "Local ASDF systems with test in the name loaded by LOAD-OP: $test_named_system_count"
                 if [ "$orphan_count" -gt 0 ]; then
                   echo "Orphan test files:" >&2
                   cat "$TMPDIR/orphans" >&2

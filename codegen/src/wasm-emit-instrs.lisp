@@ -260,17 +260,10 @@ instead of lowering tail calls to ordinary calls."
 
 (defmethod emit-instruction ((target wasm-target) (inst vm-make-array) stream)
   "Emit a fixed-size, one-dimensional Wasm GC array allocation."
-  (when (or (vm-dimensions-reg inst)
-            (vm-fill-pointer inst)
-            (vm-fill-pointer-reg inst)
-            (vm-adjustable inst)
-            (vm-adjustable-reg inst)
-            (vm-element-type-reg inst)
-            (vm-displaced-to-reg inst)
-            (vm-displaced-index-offset-reg inst)
-            (vm-copy-on-write inst)
-            (vm-copy-on-write-reg inst))
-    (error "Unsupported WASM VM-MAKE-ARRAY options: ~S" inst))
+  (let ((unsupported-options (%wasm-unsupported-vm-make-array-options inst)))
+    (when unsupported-options
+      (error "Unsupported WASM VM-MAKE-ARRAY options ~S: ~S"
+             unsupported-options inst)))
   (let* ((reg-map (wasm-target-reg-map target))
          (kind (if *wasm-gc-array-types-enabled*
                    (wasm-normalize-array-element-kind (vm-element-type inst))

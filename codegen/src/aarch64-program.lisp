@@ -261,7 +261,10 @@ Result plist keys:
        (emit-a64-instr (encode-stp-pre rn rm +a64-sp+ -2) stream)))
     (a64-shrink-restore
      (destructuring-bind (rn rm) (a64-shrink-restore-pair inst)
-       (emit-a64-instr (encode-ldp-post rn rm +a64-sp+ 2) stream)))))
+       (emit-a64-instr (encode-ldp-post rn rm +a64-sp+ 2) stream)))
+    (t
+     (error "Unsupported AArch64 shrink-wrap pseudo-instruction: ~A"
+            (type-of inst)))))
 
 (defun a64-phys-num->keyword (num)
   "Return the physical register keyword for AArch64 register NUM."

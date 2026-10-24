@@ -94,7 +94,10 @@ Frame-pointer functions restore non-RBP callee-saved registers, then use
     (x86-64-shrink-save
      (emit-push-r64 (x86-64-shrink-save-reg inst) stream))
     (x86-64-shrink-restore
-     (emit-pop-r64 (x86-64-shrink-restore-reg inst) stream))))
+     (emit-pop-r64 (x86-64-shrink-restore-reg inst) stream))
+    (t
+     (error "Unsupported x86-64 shrink-wrap pseudo-instruction: ~A"
+            (type-of inst)))))
 
 (defun x86-64-phys-code->keyword (code)
   "Return the physical register keyword for x86-64 register CODE."

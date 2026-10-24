@@ -190,8 +190,8 @@ can signal when the built-in serializer cannot encode a module.")
                        (funcall fallback-thunk)))
                (process-kit:process-error () (funcall fallback-thunk)))
           (ignore-errors (delete-file tmp-wat))
-          (ignore-errors (delete-file tmp-wasm)))
-      (funcall fallback-thunk))))
+          (ignore-errors (delete-file tmp-wasm))))
+      (funcall fallback-thunk)))
 
 (defun wasm-determinize-module! (module)
   "Sort module tables for reproducible AOT emission."

@@ -11,6 +11,26 @@
 
 (defparameter +wasm-case-br-table-min-arms+ 4
   "Minimum number of integer CASE arms before the trampoline considers br_table.")
+;;; ─────────────────────────────────────────────────────────────────────────────
+;;; Unsupported VM instruction option helpers
+;;; ─────────────────────────────────────────────────────────────────────────────
+
+(defun %wasm-unsupported-vm-make-array-options (inst)
+  (let* ((sexp (cl-cc/vm:instruction->sexp inst))
+         (slot-names '(:dst :size-reg :initial-element :fill-pointer :adjustable
+                       :element-type :fill-pointer-reg :adjustable-reg
+                       :element-type-reg :displaced-to-reg :dimensions-reg
+                       :displaced-index-offset-reg :copy-on-write
+                       :copy-on-write-reg))
+         (slot-values (rest sexp))
+         (supported-slots '(:dst :size-reg :initial-element :element-type)))
+    (unless (and (eq (first sexp) :make-array)
+                 (= (length slot-names) (length slot-values)))
+      (error "Unsupported WASM VM-MAKE-ARRAY representation: ~S" sexp))
+    (loop for slot in slot-names
+          for value in slot-values
+          unless (member slot supported-slots)
+            when value collect slot)))
 
 (defparameter +wasm-case-br-table-max-density-ratio+ 2
   "Maximum SPAN/ARM-COUNT ratio for dense integer CASE br_table lowering.")
@@ -320,17 +340,10 @@ tree emission on NIL."
                                                   (vm-closure-index inst))))
       t)
     (vm-make-array
-     (when (or (vm-dimensions-reg inst)
-               (vm-fill-pointer inst)
-               (vm-fill-pointer-reg inst)
-               (vm-adjustable inst)
-               (vm-adjustable-reg inst)
-               (vm-element-type-reg inst)
-               (vm-displaced-to-reg inst)
-               (vm-displaced-index-offset-reg inst)
-               (vm-copy-on-write inst)
-               (vm-copy-on-write-reg inst))
-       (error "Unsupported WASM VM-MAKE-ARRAY options: ~S" inst))
+     (let ((unsupported-options (%wasm-unsupported-vm-make-array-options inst)))
+       (when unsupported-options
+         (error "Unsupported WASM VM-MAKE-ARRAY options ~S: ~S"
+                unsupported-options inst)))
      (let* ((kind (if *wasm-gc-array-types-enabled*
                       (wasm-normalize-array-element-kind (vm-element-type inst))
                       :eqref))

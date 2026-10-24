@@ -431,14 +431,91 @@ only owns the accumulation."
             (error 'process-kit:process-error))))
       (expect (cl-cc/codegen::wasm-run-wasm-opt-passes #(1 2 3) :aot t)
               :to-equalp #(1 2 3))))
-  (it "does not evaluate the binary fallback when wat2wasm assembles the module"
+  (it "uses wat2wasm output without evaluating the binary fallback"
+    (let* ((available-programs '())
+           (process-called nil)
+           (output-written-p nil)
+           (fallback-called nil)
+           (wasm-output-path nil)
+           (process-output-path nil)
+           (original-temp-path (symbol-function 'cl-cc/codegen::%wasm-temp-path))
+           (expected-bytes #(0 97 115 109 1 0 0 0))
+           (actual nil))
+      (with-mocked-functions
+          (((symbol-function 'cl-cc/codegen::wasm-tool-available-p)
+            (lambda (program)
+              (push program available-programs)
+              (and (string= program "wat2wasm")
+                   (pathname "wat2wasm"))))
+           ((symbol-function 'cl-cc/codegen::%wasm-temp-path)
+            (lambda (suffix)
+              (let ((path (funcall original-temp-path suffix)))
+                (when (string= suffix "wasm")
+                  (setf wasm-output-path path))
+                path)))
+           ((symbol-function 'process-kit:run/checked)
+            (lambda (program args &rest options)
+              (declare (ignore options))
+              (setf process-called t)
+              (expect program :to-equal "wat2wasm")
+              (let* ((output-position (position "-o" args :test (function string=)))
+                     (out-path (and output-position (nth (1+ output-position) args))))
+                (expect output-position :to-be 1)
+                (setf process-output-path out-path)
+                (with-open-file (out out-path :direction :output
+                                             :if-exists :supersede
+                                             :if-does-not-exist :create
+                                             :element-type (quote (unsigned-byte 8)))
+                  (write-sequence expected-bytes out))
+                (setf output-written-p (probe-file out-path)))
+              (process-kit:make-process-result
+               :program program :arguments args :status :exited :exit-code 0 :stdout ""))))
+        (setf actual
+              (cl-cc/codegen::wasm-wat-to-binary-if-available
+               "(module)"
+               (lambda ()
+                 (setf fallback-called t)
+                 #())))
+        (when fallback-called
+          (error "wat2wasm fallback ran; checks ~S, process ~S, output ~S, wasm path ~S, process path ~S"
+                 (reverse available-programs) process-called output-written-p
+                 wasm-output-path process-output-path))
+        (expect (member "wat2wasm" available-programs :test (function string=))
+                :to-be-truthy)
+        (expect process-called :to-be t)
+        (expect output-written-p :to-be-truthy)
+        (expect (namestring wasm-output-path) :to-equal process-output-path)
+        (expect actual :to-equalp expected-bytes))))
+  (it "uses binary fallback when wat2wasm is unavailable"
+    (let ((fallback-called nil)
+          (expected-bytes #(1 2 3))
+          (actual nil))
+      (with-mocked-functions
+          (((symbol-function 'cl-cc/codegen::wasm-tool-available-p)
+            (lambda (program)
+              (declare (ignore program))
+              nil))
+           ((symbol-function 'process-kit:run/checked)
+            (lambda (&rest arguments)
+              (declare (ignore arguments))
+              (error "wat2wasm ran although the tool is unavailable"))))
+        (setf actual
+              (cl-cc/codegen::wasm-wat-to-binary-if-available
+               "(module)"
+               (lambda ()
+                 (setf fallback-called t)
+                 expected-bytes)))
+        (expect fallback-called :to-be t)
+        (expect actual :to-equalp expected-bytes))))
+  (it "compile-to-aot-wasm uses assembler bytes and preserves WAT"
     (let* ((module (cl-cc/codegen::make-empty-wasm-module))
            (func (cl-cc/codegen::make-wasm-function-def
                   :wat-name "$main"
                   :body '("(i32.const 1)")
                   :exported-p t
                   :export-name "main"))
-           (expected-bytes #(0 97 115 109 1 0 0 0)))
+           (expected-bytes #(0 97 115 109 1 0 0 0))
+           (assembler-called nil))
       (cl-cc/codegen::wasm-module-add-function module func)
       (with-mocked-functions
           (((symbol-function 'cl-cc/codegen::extract-wasm-functions)
@@ -449,20 +526,24 @@ only owns the accumulation."
             (lambda (ignored-module stream)
               (declare (ignore ignored-module))
               (write-string "(module)" stream)))
-           ((symbol-function 'cl-cc/codegen::wasm-tool-available-p)
-            (lambda (program) (and (string= program "wat2wasm") (pathname "wat2wasm"))))
-           ((symbol-function 'process-kit:run/checked)
-            (lambda (program args &rest options)
+           ((symbol-function 'cl-cc/codegen::wasm-wat-to-binary-if-available)
+            (lambda (wat fallback-thunk)
+              (expect wat :to-equal "(module)")
+              (expect (functionp fallback-thunk) :to-be t)
+              (setf assembler-called t)
+              expected-bytes))
+           ((symbol-function 'cl-cc/codegen::wasm-run-wasm-opt-passes)
+            (lambda (bytes &rest options)
               (declare (ignore options))
-              (expect program :to-equal "wat2wasm")
-              (let ((out-path (nth (1+ (position "-o" args :test (function string=))) args)))
-                (with-open-file (out out-path :direction :output
-                                       :if-exists :supersede
-                                       :if-does-not-exist :create
-                                       :element-type (quote (unsigned-byte 8)))
-                  (write-sequence expected-bytes out)))
-              (process-kit:make-process-result :stdout ""))))
+              bytes))
+           ((symbol-function 'cl-cc/codegen::wasm-run-wasm2wat)
+            (lambda (bytes fallback-wat)
+              (declare (ignore bytes))
+              fallback-wat))
+           ((symbol-function 'cl-cc/codegen::wasm-tool-available-p)
+            (lambda (program) (declare (ignore program)) nil)))
         (let ((result (cl-cc/codegen::compile-to-aot-wasm nil)))
+          (expect assembler-called :to-be t)
           (expect (cl-cc/codegen::wasm-aot-result-bytes result)
                   :to-equalp expected-bytes)
           (expect (cl-cc/codegen::wasm-aot-result-wat result)
@@ -5921,28 +6002,49 @@ only owns the accumulation."
       (expect (get-output-stream-string stream) :to-equal "")))
 
   (it "rejects VM-MAKE-ARRAY options that are silently ignored"
-    (let* ((target (make-instance 'cl-cc/codegen::wasm-target
-                                  :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 3)))
-           (inst (cl-cc/vm:make-vm-make-array
-                  :dst :r0
-                  :size-reg :r1
-                  :fill-pointer t))
-           (direct-stream (make-string-output-stream))
-           (trampoline-stream (make-string-output-stream)))
-      (expect (%codegen-error-names-p
-               (lambda () (cl-cc/codegen::emit-instruction target inst direct-stream))
-               "VM-MAKE-ARRAY")
-              :to-be-truthy)
-      (expect (get-output-stream-string direct-stream) :to-equal "")
-      (expect (%codegen-error-names-p
-               (lambda ()
-                 (cl-cc/codegen::emit-trampoline-instruction
-                  inst (make-hash-table :test 'equal)
-                  (cl-cc/codegen::make-wasm-reg-map-for-function 3)
-                  1 trampoline-stream))
-               "VM-MAKE-ARRAY")
-              :to-be-truthy)
-      (expect (get-output-stream-string trampoline-stream) :to-equal "")))
+    (let ((target (make-instance 'cl-cc/codegen::wasm-target
+                                 :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 3)))
+          (unsupported-options
+            '((:fill-pointer t)
+              (:adjustable t)
+              (:fill-pointer-reg :r2)
+              (:adjustable-reg :r2)
+              (:element-type-reg :r2)
+              (:displaced-to-reg :r2)
+              (:dimensions-reg :r2)
+              (:displaced-index-offset-reg :r2)
+              (:copy-on-write t)
+              (:copy-on-write-reg :r2))))
+      (flet ((assert-rejected (thunk stream backend option-name)
+               (let ((condition (%capture-codegen-error thunk)))
+                 (unless condition
+                   (error "~A Wasm VM-MAKE-ARRAY emitter returned without an error for ~A."
+                          backend option-name))
+                 (let ((condition-text (string-upcase (princ-to-string condition))))
+                   (unless (search "UNSUPPORTED WASM VM-MAKE-ARRAY OPTIONS" condition-text)
+                     (error "~A Wasm VM-MAKE-ARRAY emitter raised an unexpected error for ~A: ~A"
+                            backend option-name condition))
+                   (unless (search option-name condition-text)
+                     (error "~A Wasm VM-MAKE-ARRAY error does not name option ~A: ~A"
+                            backend option-name condition))))
+               (expect (get-output-stream-string stream) :to-equal "")))
+        (dolist (case unsupported-options)
+          (let* ((option-name (string-upcase (symbol-name (first case))))
+                 (inst (apply #'cl-cc/vm:make-vm-make-array
+                              (append (list :dst :r0 :size-reg :r1) case)))
+                 (direct-stream (make-string-output-stream))
+                 (trampoline-stream (make-string-output-stream)))
+            (assert-rejected
+             (lambda ()
+               (cl-cc/codegen::emit-instruction target inst direct-stream))
+             direct-stream "Direct" option-name)
+            (assert-rejected
+             (lambda ()
+               (cl-cc/codegen::emit-trampoline-instruction
+                inst (make-hash-table :test 'equal)
+                (cl-cc/codegen::make-wasm-reg-map-for-function 3)
+                1 trampoline-stream))
+             trampoline-stream "Trampoline" option-name))))))
 
   (it "rejects VM-GENERIC-CALL argument counts and operands it cannot marshal"
     (let* ((target (make-instance 'cl-cc/emit:wasm-target
@@ -6164,4 +6266,20 @@ only owns the accumulation."
       (expect (%codegen-error-names-p
                (lambda () (cl-cc/codegen::riscv64-instruction-size inst))
                "VM-CONST")
-              :to-be-truthy))))
+              :to-be-truthy)))
+  (it "x86-64 and AArch64 reject unsupported shrink-wrap pseudo types"
+    (let ((inst (cl-cc/vm:make-vm-const :dst :r0 :value 1))
+          (x86-stream (make-string-output-stream))
+          (aarch64-stream (make-string-output-stream)))
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-x86-64-shrink-pseudo inst x86-stream))
+               "VM-CONST")
+              :to-be-truthy)
+      (expect (get-output-stream-string x86-stream) :to-equal "")
+      (expect (%codegen-error-names-p
+               (lambda ()
+                 (cl-cc/codegen::emit-a64-shrink-pseudo inst aarch64-stream))
+               "VM-CONST")
+              :to-be-truthy)
+      (expect (get-output-stream-string aarch64-stream) :to-equal ""))))

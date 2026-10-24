@@ -455,9 +455,12 @@ only owns the accumulation."
             (lambda (program args &rest options)
               (declare (ignore options))
               (expect program :to-equal "wat2wasm")
-              (cl-cc/codegen::%wasm-write-bytes-file
-               (nth (1+ (position "-o" args :test #'string=)) args)
-               expected-bytes)
+              (let ((out-path (nth (1+ (position "-o" args :test (function string=))) args)))
+                (with-open-file (out out-path :direction :output
+                                       :if-exists :supersede
+                                       :if-does-not-exist :create
+                                       :element-type (quote (unsigned-byte 8)))
+                  (write-sequence expected-bytes out)))
               (process-kit:make-process-result :stdout ""))))
         (let ((result (cl-cc/codegen::compile-to-aot-wasm nil)))
           (expect (cl-cc/codegen::wasm-aot-result-bytes result)
@@ -5921,7 +5924,9 @@ only owns the accumulation."
     (let* ((target (make-instance 'cl-cc/codegen::wasm-target
                                   :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 3)))
            (inst (cl-cc/vm:make-vm-make-array
-                  :dst :r0 :size-reg :r1 :element-type-reg :r2))
+                  :dst :r0
+                  :size-reg :r1
+                  :fill-pointer t))
            (direct-stream (make-string-output-stream))
            (trampoline-stream (make-string-output-stream)))
       (expect (%codegen-error-names-p

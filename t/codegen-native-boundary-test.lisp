@@ -450,7 +450,7 @@ only owns the accumulation."
               (declare (ignore ignored-module))
               (write-string "(module)" stream)))
            ((symbol-function 'cl-cc/codegen::wasm-tool-available-p)
-            (lambda (program) (string= program "wat2wasm")))
+            (lambda (program) (and (string= program "wat2wasm") (pathname "wat2wasm"))))
            ((symbol-function 'process-kit:run/checked)
             (lambda (program args &rest options)
               (declare (ignore options))
@@ -464,7 +464,7 @@ only owns the accumulation."
                   :to-equalp expected-bytes)
           (expect (cl-cc/codegen::wasm-aot-result-wat result)
                   :to-equal "(module)")))))
-  (it "preserves unsupported-instruction errors when wat2wasm is unavailable"
+  (it "AOT WAT construction rejects unsupported VM-PREFETCH"
     (let* ((module (cl-cc/codegen::make-empty-wasm-module))
            (func (cl-cc/codegen::make-wasm-function-def
                   :wat-name "$main"
@@ -473,16 +473,8 @@ only owns the accumulation."
                          :base-reg :r0 :index-reg :r1)))))
       (cl-cc/codegen::wasm-module-add-function module func)
       (with-mocked-functions
-          (((symbol-function 'cl-cc/codegen::extract-wasm-functions)
-            (lambda (program) (declare (ignore program)) module))
-           ((symbol-function 'cl-cc/codegen::build-all-wasm-functions)
-            (lambda (ignored-module) (declare (ignore ignored-module))))
-           ((symbol-function 'cl-cc/codegen::emit-wasm-module)
-            (lambda (ignored-module stream)
-              (declare (ignore ignored-module))
-              (write-string "(module)" stream)))
-           ((symbol-function 'cl-cc/codegen::wasm-tool-available-p)
-            (lambda (program) (declare (ignore program)) nil)))
+          (((symbol-function (quote cl-cc/codegen::extract-wasm-functions))
+            (lambda (program) (declare (ignore program)) module)))
         (expect (%codegen-error-names-p
                  (lambda () (cl-cc/codegen::compile-to-aot-wasm nil))
                  "VM-PREFETCH")
@@ -5926,7 +5918,7 @@ only owns the accumulation."
       (expect (get-output-stream-string stream) :to-equal "")))
 
   (it "rejects VM-MAKE-ARRAY options that are silently ignored"
-    (let* ((target (make-instance 'cl-cc/emit:wasm-target
+    (let* ((target (make-instance 'cl-cc/codegen::wasm-target
                                   :reg-map (cl-cc/codegen::make-wasm-reg-map-for-function 3)))
            (inst (cl-cc/vm:make-vm-make-array
                   :dst :r0 :size-reg :r1 :element-type-reg :r2))

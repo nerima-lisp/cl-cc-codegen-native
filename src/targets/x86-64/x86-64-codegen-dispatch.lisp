@@ -392,7 +392,7 @@ instead of emitting a placeholder."
     ;; FR-298: vm-print with real I/O (indirect call through R11)
     (vm-print        . emit-vm-print)
     ;; Ball-Larus path profiling: profiling counter update, no native emission
-    (cl-cc/optimize::opt-vm-path-profile-record . emit-vm-native-noop-inst)
+    (cl-cc/optimize:opt-vm-path-profile-record . emit-vm-native-noop-inst)
     (vm-halt         . emit-vm-halt-inst)
      (vm-call         . emit-vm-call-like-inst)
      (vm-tail-call    . emit-vm-tail-call-inst)

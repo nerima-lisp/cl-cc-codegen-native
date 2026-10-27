@@ -85,7 +85,7 @@
   "Emit AArch64 machine code for one VM instruction."
   (let ((tp (type-of inst)))
     (cond
-      ((member tp '(vm-label cl-cc/optimize::opt-vm-path-profile-record)
+      ((member tp '(vm-label cl-cc/optimize:opt-vm-path-profile-record)
         :test #'eq)
        nil)
       ((eq tp 'vm-const)

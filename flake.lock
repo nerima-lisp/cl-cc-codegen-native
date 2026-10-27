@@ -88,17 +88,17 @@
     "cl-cc-optimize": {
       "flake": false,
       "locked": {
-        "lastModified": 1791350360,
-        "narHash": "sha256-YE9hcLik9Iolb3qHxDVnhvhabIFg5C6wbmATUXmVV4A=",
+        "lastModified": 1793098066,
+        "narHash": "sha256-MtQezFfVPk4yaK1elmkpIjHuovpiDxHeXDUDaxSbFFc=",
         "owner": "nerima-lisp",
         "repo": "cl-cc-optimize",
-        "rev": "f6cd93f54b4e04083aad0f3fee30def14a427f89",
+        "rev": "ea77f8c999a100cba7dcde3fce91d5722a15d549",
         "type": "github"
       },
       "original": {
         "owner": "nerima-lisp",
         "repo": "cl-cc-optimize",
-        "rev": "f6cd93f54b4e04083aad0f3fee30def14a427f89",
+        "rev": "ea77f8c999a100cba7dcde3fce91d5722a15d549",
         "type": "github"
       }
     },

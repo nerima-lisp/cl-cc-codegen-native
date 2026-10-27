@@ -183,7 +183,7 @@ register state, and jumps to this label."
     ;; Fall through to compiled code body
     (values)))
 
-(defmethod emit-instruction (target (inst cl-cc/optimize::opt-vm-path-profile-record) stream)
+(defmethod emit-instruction (target (inst cl-cc/optimize:opt-vm-path-profile-record) stream)
   "No-op: Ball-Larus path profiling counters are updated at interpreter level."
   (declare (ignore target inst stream))
   nil)

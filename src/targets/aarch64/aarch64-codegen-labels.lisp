@@ -99,7 +99,7 @@
     (setf (gethash 'vm-select ht) 12)       ; encode-mov-rr + encode-cmp + encode-csel
     (setf (gethash 'vm-bswap ht) 4)         ; encode-rev32
     (setf (gethash 'vm-rotate ht) 8)        ; MOV + RORV
-    (setf (gethash 'cl-cc/optimize::opt-vm-path-profile-record ht) 0)
+    (setf (gethash 'cl-cc/optimize:opt-vm-path-profile-record ht) 0)
     (setf (gethash 'vm-label ht) 0)         ; no code
     (setf (gethash 'vm-jump ht) 4)          ; encode-b
     (setf (gethash 'vm-jump-zero ht) 4)     ; encode-cbz

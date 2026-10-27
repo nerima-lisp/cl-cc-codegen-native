@@ -175,7 +175,7 @@ branch is encoded as rel8.")
                          6
                          (error "Unsupported x86-64 instruction: ~A requires shadow-stack support"
                                 (type-of inst)))
-                     (if (eq (type-of inst) 'cl-cc/optimize::opt-vm-path-profile-record)
+                     (if (eq (type-of inst) 'cl-cc/optimize:opt-vm-path-profile-record)
                        0
                        (or (x86-64-dynamic-instruction-size inst)
                            (error "Unsupported x86-64 instruction: ~A" (type-of inst))))))))))

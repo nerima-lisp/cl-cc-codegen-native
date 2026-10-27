@@ -58,8 +58,7 @@
    #:vm-spill-dst #:vm-spill-load #:vm-spill-slot #:vm-spill-src #:vm-spill-store)
   (:import-from #:cl-cc/codegen-native/scheduling
    #:%native-block-terminator #:%native-common-dominator #:%native-inst-reads-phys-p #:%native-inst-touches-phys-p #:*shrink-wrap-enabled* #:schedule-post-ra)
-  (:export
-   #:*aarch64-atomics-enabled* #:*aarch64-cfi-enabled* #:*aarch64-pac-enabled* #:*aarch64-safe-stack-enabled* #:*aarch64-shadow-call-stack-enabled* #:*aarch64-stack-clash-protection-enabled* #:*aarch64-stack-protector-enabled* #:*aarch64-sve-enabled*
+  (:export #:*aarch64-atomics-enabled* #:*aarch64-cfi-enabled* #:*aarch64-pac-enabled* #:*aarch64-safe-stack-enabled* #:*aarch64-shadow-call-stack-enabled* #:*aarch64-stack-clash-protection-enabled* #:*aarch64-stack-protector-enabled* #:*aarch64-sve-enabled*
    #:*aarch64-sve2-enabled* #:*isel-aarch64-rules* #:*sme-enabled* #:+a64-za+ #:aarch64-supports-sme-p #:aarch64-target #:compile-to-aarch64-bytes #:encode-fmopa
-   #:encode-smstart #:encode-smstop)
+   #:encode-smstart #:encode-smstop #:*a64-omit-frame-pointer*)
 )

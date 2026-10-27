@@ -108,11 +108,9 @@
    #:*asan-instrumentation-enabled* #:*asan-shadow-base* #:*ubsan-instrumentation-enabled* #:sanitizer-enabled-p)
   (:import-from #:cl-cc/codegen-native/scheduling
    #:%native-block-terminator #:%native-common-dominator #:%native-inst-reads-phys-p #:%native-inst-touches-phys-p #:*shrink-wrap-enabled* #:codegen-hot-cold-ordered-instructions #:schedule-post-ra)
-  (:export
-   #:*amx-enabled* #:*eh-model* #:*isel-x86-64-rules* #:*phys-reg-to-asm-string* #:*phys-reg-to-x86-code* #:*x86-64-apx-enabled* #:*x86-64-atomics-enabled* #:*x86-64-avx512-enabled*
+  (:export #:*amx-enabled* #:*eh-model* #:*isel-x86-64-rules* #:*phys-reg-to-asm-string* #:*phys-reg-to-x86-code* #:*x86-64-apx-enabled* #:*x86-64-atomics-enabled* #:*x86-64-avx512-enabled*
    #:*x86-64-cfi-enabled* #:*x86-64-safe-stack-enabled* #:*x86-64-shadow-stack-enabled* #:*x86-64-spectre-mitigations-enabled* #:*x86-64-stack-clash-protection-enabled* #:*x86-64-stack-protector-enabled* #:*x86-64-use-retpoline* #:*zero-cost-eh-enabled*
    #:+tmm0+ #:+tmm1+ #:+tmm2+ #:+tmm3+ #:+tmm4+ #:+tmm5+ #:+tmm6+ #:+tmm7+
    #:compile-to-x86-64-bytes #:emit-tdpbssd #:emit-tileloadd #:emit-tilestored #:emit-x86-64-speculation-barrier #:normalize-x86-64-eh-model #:vm-reg-to-x86-with-alloc #:win-cfg-emit-guard-check-icall-thunk
-   #:win-cfg-emit-guard-dispatch-icall-thunk #:x86-64-eh-condition-matches-p #:x86-64-lsda-bytes #:x86-64-personality-dispatch #:x86-64-red-zone-spill-p #:x86-64-speculative-execution-mitigation-enabled-p #:x86-64-supports-amx-p #:x86-64-table-eh-enabled-p
-   #:x86-64-target)
+   #:win-cfg-emit-guard-dispatch-icall-thunk #:x86-64-eh-condition-matches-p #:x86-64-lsda-bytes #:x86-64-personality-dispatch #:x86-64-red-zone-spill-p #:x86-64-speculative-execution-mitigation-enabled-p #:x86-64-supports-amx-p #:x86-64-table-eh-enabled-p #:x86-64-target #:*x86-64-omit-frame-pointer*)
 )

@@ -78,6 +78,24 @@
                 #:vm-spill-dst
                 #:vm-spill-slot
                 #:*current-regalloc*)
+  (:import-from :cl-cc/codegen-native/targets/x86-64
+                #:*x86-64-omit-frame-pointer*)
+  (:import-from :cl-cc/codegen-native/targets/aarch64
+                #:*a64-omit-frame-pointer*)
+  (:import-from :cl-cc/codegen-native/targets/wasm
+                #:*wasm-aot-mode-enabled*
+                #:*wasm-call-stack-inspection-enabled*
+                #:*wasm-dwarf-debug-info-enabled*
+                #:*wasm-extended-names-enabled*
+                #:*wasm-hot-code-reload-enabled*
+                #:*wasm-js-bigint-i64-enabled*
+                #:*wasm-memory-profiler-enabled*
+                #:*wasm-memory64-enabled*
+                #:*wasm-repl-incremental-compilation-enabled*
+                #:*wasm-source-map-enabled*
+                #:*wasm-source-map-url*
+                #:*wasm-table64-enabled*
+                #:*wasm-type-reflection-js-api-enabled*)
   (:export
    ;; ── Regalloc re-exports ──
    #:live-interval

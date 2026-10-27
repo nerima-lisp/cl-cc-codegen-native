@@ -160,8 +160,7 @@
    #:wasm-values-wat #:wasm-vector-literal-kind #:wasm-vector-literal-wat #:wasm-vm-slot-value #:wasm-wide-arithmetic-feature-enabled-p #:wasm-worker-runtime-initialization #:with-wasm-atomic-threads)
   (:shadowing-import-from #:cl-cc/codegen-native/lowering
    #:emit-instruction #:target #:target-register)
-  (:export
-   #:*wasm-bulk-memory-enabled* #:*wasm-label-to-table-idx* #:*wasm-memory-grow-oom-check-enabled* #:*wasm-threads-enabled* #:*wasm-threads-worker-count* #:+wasm-anyref+ #:+wasm-arrayref+ #:+wasm-block+
+  (:export #:*wasm-bulk-memory-enabled* #:*wasm-label-to-table-idx* #:*wasm-memory-grow-oom-check-enabled* #:*wasm-threads-enabled* #:*wasm-threads-worker-count* #:+wasm-anyref+ #:+wasm-arrayref+ #:+wasm-block+
    #:+wasm-br+ #:+wasm-br-if+ #:+wasm-br-on-non-null+ #:+wasm-br-on-null+ #:+wasm-br-table+ #:+wasm-call+ #:+wasm-call-indirect+ #:+wasm-call-ref+
    #:+wasm-catch+ #:+wasm-cont-bind+ #:+wasm-cont-new+ #:+wasm-cont-throw+ #:+wasm-data-drop+ #:+wasm-drop+ #:+wasm-elem-drop+ #:+wasm-else+
    #:+wasm-end+ #:+wasm-eqref+ #:+wasm-export-func+ #:+wasm-export-global+ #:+wasm-export-memory+ #:+wasm-export-table+ #:+wasm-externref+ #:+wasm-f16-add+
@@ -216,7 +215,7 @@
    #:wasm-trunc-sat-f64-i32-wat #:wasm-trunc-sat-f64-i64-wat #:wasm-value-to-array-element-wat #:wasm-vector-literal-kind #:wasm-vector-literal-wat #:wasm-worker-runtime-initialization
    #:*wasm-aot-mode-enabled* #:*wasm-dead-import-elimination-enabled* #:extract-wasm-functions
    #:wasm-func-export-name #:wasm-func-exported-p #:wasm-func-index #:wasm-func-wat-name
-   #:wasm-global-def-wat-name #:wasm-module-functions #:wasm-module-globals)
+   #:wasm-global-def-wat-name #:wasm-module-functions #:wasm-module-globals #:*wasm-call-stack-inspection-enabled* #:*wasm-dwarf-debug-info-enabled* #:*wasm-extended-names-enabled* #:*wasm-hot-code-reload-enabled* #:*wasm-js-bigint-i64-enabled* #:*wasm-memory-profiler-enabled* #:*wasm-memory64-enabled* #:*wasm-repl-incremental-compilation-enabled* #:*wasm-source-map-enabled* #:*wasm-source-map-url* #:*wasm-table64-enabled* #:*wasm-type-reflection-js-api-enabled*)
 )
 
 (defpackage #:cl-cc/codegen-native/targets/wasm/infra

@@ -23,34 +23,13 @@
 
 (defun wasm-encode-unsigned-leb128 (value)
   "Return VALUE encoded as an unsigned LEB128 byte vector."
-  (check-type value (integer 0 *))
-  (let ((bytes nil)
-        (n value))
-    (loop
-      (let ((byte (logand n #x7f)))
-        (setf n (ash n -7))
-        (when (plusp n)
-          (setf byte (logior byte #x80)))
-        (push byte bytes)
-        (unless (plusp n)
-          (return (coerce (nreverse bytes)
-                          '(simple-array (unsigned-byte 8) (*)))))))))
+  (coerce (cl-cc/binary/wasm:encode-uleb128 value)
+          '(simple-array (unsigned-byte 8) (*))))
 
 (defun wasm-encode-signed-leb128 (value)
   "Return VALUE encoded as a signed LEB128 byte vector."
-  (check-type value integer)
-  (let ((bytes nil)
-        (n value)
-        (more t))
-    (loop while more do
-      (let ((byte (logand n #x7f)))
-        (setf n (ash n -7))
-        (if (or (and (zerop n) (zerop (logand byte #x40)))
-                (and (= n -1) (not (zerop (logand byte #x40)))))
-            (setf more nil)
-            (setf byte (logior byte #x80)))
-        (push byte bytes)))
-    (coerce (nreverse bytes) '(simple-array (unsigned-byte 8) (*)))))
+  (coerce (cl-cc/binary/wasm:encode-sleb128 value)
+          '(simple-array (unsigned-byte 8) (*))))
 
 (defun wasm-binary-write-uleb128 (buffer value)
   "Write VALUE as unsigned LEB128 to BUFFER."
@@ -68,14 +47,15 @@
 
 (defun wasm-binary-write-section (buffer section-id writer)
   "Write a standard WASM section with SECTION-ID and payload from WRITER."
-  (let ((payload (wasm-binary-section-bytes writer)))
-    (wasm-binary-write-u8 buffer section-id)
-    (wasm-binary-write-uleb128 buffer (length payload))
-    (wasm-binary-write-bytes buffer payload)))
+  (wasm-binary-write-bytes
+   buffer
+   (cl-cc/binary/wasm:encode-wasm-section
+    section-id
+    (wasm-binary-section-bytes writer))))
 
 (defun wasm-binary-write-name (buffer name)
-  "Write NAME as a WASM binary name (byte length + bytes)."
-  (let ((bytes (map 'vector #'char-code name)))
+  "Write NAME as a UTF-8 WebAssembly name."
+  (let ((bytes (sb-ext:string-to-octets name :external-format :utf-8)))
     (wasm-binary-write-uleb128 buffer (length bytes))
     (wasm-binary-write-bytes buffer bytes)))
 
@@ -143,22 +123,19 @@
   (or (wasm-module-functions module) nil))
 
 (defun wasm-binary-write-type-section (buffer &key (params nil) (results nil))
-  "Write a Type section containing a single MVP () -> () function signature."
-  (wasm-binary-write-section
-   buffer +wasm-section-type+
-   (lambda (section)
-     (wasm-binary-write-uleb128 section 1)
-     (wasm-binary-write-func-type section params results))))
+  "Write a Type section containing a single MVP function signature."
+  (wasm-binary-write-bytes
+   buffer
+   (cl-cc/binary/wasm:encode-wasm-type-section
+    (list (list (mapcar #'wasm-binary-value-type-byte params)
+                (mapcar #'wasm-binary-value-type-byte results))))))
 
 (defun wasm-binary-write-function-section (buffer functions)
   "Write the Function section for FUNCTIONS, all using type index 0."
-  (wasm-binary-write-section
-   buffer +wasm-section-function+
-   (lambda (section)
-     (wasm-binary-write-uleb128 section (length functions))
-     (dolist (func functions)
-       (declare (ignore func))
-       (wasm-binary-write-uleb128 section 0)))))
+  (wasm-binary-write-bytes
+   buffer
+   (cl-cc/binary/wasm:encode-wasm-function-section
+    (make-list (length functions) :initial-element 0))))
 
 (defun wasm-binary-export-name-for-function (func)
   "Return FUNC's export name, or NIL when it should not be exported."
@@ -174,14 +151,14 @@
   "Write the Export section for exported FUNCTIONS."
   (let ((exports (remove-if-not #'wasm-binary-export-name-for-function functions)))
     (when exports
-      (wasm-binary-write-section
-       buffer +wasm-section-export+
-       (lambda (section)
-         (wasm-binary-write-uleb128 section (length exports))
-         (dolist (func exports)
-           (wasm-binary-write-name section (wasm-binary-export-name-for-function func))
-           (wasm-binary-write-u8 section +wasm-export-func+)
-           (wasm-binary-write-uleb128 section (or (wasm-func-index func) 0))))))))
+      (wasm-binary-write-bytes
+       buffer
+       (cl-cc/binary/wasm:encode-wasm-export-section
+        (mapcar (lambda (func)
+                  (list (wasm-binary-export-name-for-function func)
+                        +wasm-export-func+
+                        (or (wasm-func-index func) 0)))
+                exports))))))
 
 (defun wasm-binary-write-local-decls (buffer local-groups)
   "Write local declaration groups as (COUNT TYPE) entries."
@@ -201,32 +178,38 @@
     (error "Cannot encode WAT body for WASM binary function ~A, unsupported instruction ~S"
            (wasm-func-wat-name func)
            (first (wasm-func-body func))))
-  (wasm-binary-section-bytes
-   (lambda (body)
-     (wasm-binary-write-local-decls body nil)
-     (wasm-binary-write-u8 body +wasm-end+))))
+  (coerce (vector 0 +wasm-end+)
+          '(simple-array (unsigned-byte 8) (*))))
 
 (defun wasm-binary-write-code-section (buffer functions)
   "Write the Code section for FUNCTIONS."
-  (wasm-binary-write-section
-   buffer +wasm-section-code+
-   (lambda (section)
-     (wasm-binary-write-uleb128 section (length functions))
-     (dolist (func functions)
-       (let ((body (wasm-binary-function-body-bytes func)))
-         (wasm-binary-write-uleb128 section (length body))
-         (wasm-binary-write-bytes section body))))))
+  (wasm-binary-write-bytes
+   buffer
+   (cl-cc/binary/wasm:encode-wasm-code-section
+    (mapcar #'wasm-binary-function-body-bytes functions))))
 
 (defun emit-wasm-binary-module (module)
   "Serialize MODULE to a minimal WebAssembly binary module byte array."
   (let* ((functions (wasm-binary-module-functions module))
-         (buffer (cl-cc/binary::make-byte-buffer 128)))
-    (wasm-binary-write-bytes buffer #(#x00 #x61 #x73 #x6d #x01 #x00 #x00 #x00))
-    (wasm-binary-write-type-section buffer)
-    (wasm-binary-write-function-section buffer functions)
-    (wasm-binary-write-export-section buffer functions)
-    (wasm-binary-write-code-section buffer functions)
-    (cl-cc/binary::buffer-get-bytes buffer)))
+         (exports (remove-if-not #'wasm-binary-export-name-for-function functions))
+         (sections
+           (append
+            (list
+             (cl-cc/binary/wasm:encode-wasm-type-section (list (list nil nil)))
+             (cl-cc/binary/wasm:encode-wasm-function-section
+              (make-list (length functions) :initial-element 0)))
+            (when exports
+              (list
+               (cl-cc/binary/wasm:encode-wasm-export-section
+                (mapcar (lambda (func)
+                          (list (wasm-binary-export-name-for-function func)
+                                +wasm-export-func+
+                                (or (wasm-func-index func) 0)))
+                        exports))))
+            (list
+             (cl-cc/binary/wasm:encode-wasm-code-section
+              (mapcar #'wasm-binary-function-body-bytes functions))))))
+    (cl-cc/binary/wasm:encode-wasm-module sections)))
 
 (defun compile-to-wasm-binary (program)
   "Compile a vm-program to a minimal WebAssembly binary module byte array."

@@ -21,9 +21,8 @@
    #:%wasm-const-value-to-wat #:%wasm-dense-case-entry-labels #:%wasm-devtools-js #:%wasm-direct-call #:%wasm-dwarf-lines-for-module #:%wasm-dwarf-subprogram-for-func #:%wasm-dynamic-eh-entries #:%wasm-effective-eh-entries
    #:%wasm-eh-entry->block-entry #:%wasm-eh-pc-range-test #:%wasm-emit-atomic-op #:%wasm-emit-byte #:%wasm-emit-bytes #:%wasm-emit-fence-method #:%wasm-emit-i32-const #:%wasm-emit-i64-const
    #:%wasm-emit-memarg #:%wasm-emit-u32 #:%wasm-empty-symbol-eqref #:%wasm-encode-s32-leb128 #:%wasm-encode-s64-leb128 #:%wasm-encode-u32-leb128 #:%wasm-float-literal-eqref #:%wasm-function-index-for-label
-   #:%wasm-function-local-exception-table #:%wasm-function-name-assocs #:%wasm-function-source-offset #:%wasm-human-local-name #:%wasm-i32x4-store-to-array-wat #:%wasm-if-eqref #:%wasm-import-needed-p #:%wasm-indirect-name-map
-   #:%wasm-instruction-pc-index #:%wasm-json-string #:%wasm-label-at-pc #:%wasm-label-name-assocs #:%wasm-local-name-assocs #:%wasm-local-pc-block-map #:%wasm-main-function-type-index #:%wasm-memory-args
-   #:%wasm-name-assoc-vector #:%wasm-name-section-subsection #:%wasm-next-label-after #:%wasm-normalize-integer-case-targets #:%wasm-normalize-wat-name #:%wasm-note-case-value #:%wasm-register-method-value-eqref #:%wasm-registers-in-function
+   #:%wasm-function-local-exception-table #:%wasm-function-name-assocs #:%wasm-function-source-offset #:%wasm-human-local-name #:%wasm-i32x4-store-to-array-wat #:%wasm-if-eqref #:%wasm-import-needed-p #:%wasm-instruction-pc-index #:%wasm-json-string #:%wasm-label-at-pc #:%wasm-label-name-assocs #:%wasm-local-name-assocs #:%wasm-local-pc-block-map #:%wasm-main-function-type-index #:%wasm-memory-args
+   #:%wasm-next-label-after #:%wasm-normalize-integer-case-targets #:%wasm-normalize-wat-name #:%wasm-note-case-value #:%wasm-register-method-value-eqref #:%wasm-registers-in-function
    #:%wasm-reject-float-arithmetic #:%wasm-require-relaxed-simd #:%wasm-require-simd #:%wasm-symbol-literal-eqref #:%wasm-symbol-name-string-t-eqref #:%wasm-type-reflection-json #:%wasm-u8 #:%wasm-unsupported-vm-make-array-options
    #:%wasm-wat-string #:*wasm-abi-mangling* #:*wasm-abstract-types-enabled* #:*wasm-any-extern-convert-enabled* #:*wasm-aot-current-used-imports* #:*wasm-aot-mode* #:*wasm-aot-mode-enabled* #:*wasm-array-new-elem-enabled*
    #:*wasm-array-type-names* #:*wasm-atomic-fence-enabled* #:*wasm-atomic-wait-timeout-enabled* #:*wasm-binary-tool-integration-enabled* #:*wasm-binary-tools-path* #:*wasm-binop-dispatch* #:*wasm-branch-hinting* #:*wasm-branch-hinting-enabled*
@@ -160,8 +159,7 @@
    #:wasm-values-wat #:wasm-vector-literal-kind #:wasm-vector-literal-wat #:wasm-vm-slot-value #:wasm-wide-arithmetic-feature-enabled-p #:wasm-worker-runtime-initialization #:with-wasm-atomic-threads)
   (:shadowing-import-from #:cl-cc/codegen-native/lowering
    #:emit-instruction #:target #:target-register)
-  (:export
-   #:*wasm-bulk-memory-enabled* #:*wasm-label-to-table-idx* #:*wasm-memory-grow-oom-check-enabled* #:*wasm-threads-enabled* #:*wasm-threads-worker-count* #:+wasm-anyref+ #:+wasm-arrayref+ #:+wasm-block+
+  (:export #:*wasm-bulk-memory-enabled* #:*wasm-label-to-table-idx* #:*wasm-memory-grow-oom-check-enabled* #:*wasm-threads-enabled* #:*wasm-threads-worker-count* #:+wasm-anyref+ #:+wasm-arrayref+ #:+wasm-block+
    #:+wasm-br+ #:+wasm-br-if+ #:+wasm-br-on-non-null+ #:+wasm-br-on-null+ #:+wasm-br-table+ #:+wasm-call+ #:+wasm-call-indirect+ #:+wasm-call-ref+
    #:+wasm-catch+ #:+wasm-cont-bind+ #:+wasm-cont-new+ #:+wasm-cont-throw+ #:+wasm-data-drop+ #:+wasm-drop+ #:+wasm-elem-drop+ #:+wasm-else+
    #:+wasm-end+ #:+wasm-eqref+ #:+wasm-export-func+ #:+wasm-export-global+ #:+wasm-export-memory+ #:+wasm-export-table+ #:+wasm-externref+ #:+wasm-f16-add+
@@ -216,7 +214,7 @@
    #:wasm-trunc-sat-f64-i32-wat #:wasm-trunc-sat-f64-i64-wat #:wasm-value-to-array-element-wat #:wasm-vector-literal-kind #:wasm-vector-literal-wat #:wasm-worker-runtime-initialization
    #:*wasm-aot-mode-enabled* #:*wasm-dead-import-elimination-enabled* #:extract-wasm-functions
    #:wasm-func-export-name #:wasm-func-exported-p #:wasm-func-index #:wasm-func-wat-name
-   #:wasm-global-def-wat-name #:wasm-module-functions #:wasm-module-globals)
+   #:wasm-global-def-wat-name #:wasm-module-functions #:wasm-module-globals #:*wasm-call-stack-inspection-enabled* #:*wasm-dwarf-debug-info-enabled* #:*wasm-extended-names-enabled* #:*wasm-hot-code-reload-enabled* #:*wasm-js-bigint-i64-enabled* #:*wasm-memory-profiler-enabled* #:*wasm-memory64-enabled* #:*wasm-repl-incremental-compilation-enabled* #:*wasm-source-map-enabled* #:*wasm-source-map-url* #:*wasm-table64-enabled* #:*wasm-type-reflection-js-api-enabled*)
 )
 
 (defpackage #:cl-cc/codegen-native/targets/wasm/infra

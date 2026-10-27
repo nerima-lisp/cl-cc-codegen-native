@@ -52,7 +52,7 @@
       flake = false;
     };
     cl-cc-binary = {
-      url = "github:nerima-lisp/cl-cc-binary/4c0661c1b2e22be5f28277b0d563eea6651c51e3";
+      url = "github:nerima-lisp/cl-cc-binary/14a08f905e42792ff57dc5a946e6706ec87a976b";
       flake = false;
     };
     cl-cc-optimize = {

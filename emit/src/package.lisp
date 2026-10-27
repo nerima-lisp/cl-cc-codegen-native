@@ -4,6 +4,9 @@
 
 (defpackage :cl-cc/emit
   (:use :cl :cl-cc/vm :cl-cc/mir :cl-cc/optimize :cl-cc/codegen)
+  (:import-from :cl-cc/codegen-native/lowering
+    #:*burs-rules* #:burs-rule #:burs-select-instructions
+    #:make-burs-rule #:register-burs-rule)
   (:shadowing-import-from :cl-cc/vm
     #:get-universal-time #:get-internal-real-time #:get-internal-run-time
     #:internal-time-units-per-second #:sleep #:time
@@ -169,4 +172,9 @@
       #:riscv64-emit-prologue
       #:riscv64-emit-epilogue
       #:riscv64-emit-load-immediate
+      #:*burs-rules*
+      #:burs-rule
+      #:burs-select-instructions
+      #:make-burs-rule
+      #:register-burs-rule
       #:riscv64-emit-pic-call))

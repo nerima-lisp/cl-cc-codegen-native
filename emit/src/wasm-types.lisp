@@ -10,30 +10,31 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun %emit-reexport-codegen-symbols (names)
-    "Import and export codegen symbols named by NAMES from CL-CC/EMIT.
-
-When CL-CC/EMIT already owns a symbol with the same name (for example one of the
-WASM Threads compatibility constants), keep that local symbol and export it to
-avoid package conflicts.  Otherwise import the canonical CL-CC/CODEGEN symbol and
-export it from this facade package."
+    "Re-export NAMES, preferring the WASM feature package over the legacy facade."
     (let ((emit-package (find-package :cl-cc/emit))
-          (codegen-package (find-package :cl-cc/codegen)))
+          (source-packages
+           (remove nil
+                   (list (find-package :cl-cc/codegen-native/targets/wasm)
+                         (find-package :cl-cc/codegen)))))
       (dolist (name names)
-        (multiple-value-bind (codegen-symbol status)
-            (find-symbol name codegen-package)
-          (declare (ignore status))
-          (when codegen-symbol
+        (let ((source-symbol
+               (loop for source-package in source-packages
+                     for symbol = (find-symbol name source-package)
+                     when symbol return symbol)))
+          (when source-symbol
             (multiple-value-bind (emit-symbol emit-status)
                 (find-symbol name emit-package)
               (declare (ignore emit-status))
               (cond
-                ((and emit-symbol (not (eq emit-symbol codegen-symbol)))
-                 (export emit-symbol emit-package))
-                (emit-symbol
-                 (export emit-symbol emit-package))
-                (t
-                 (import codegen-symbol emit-package)
-                 (export codegen-symbol emit-package))))))))))
+               ((and emit-symbol (not (eq emit-symbol source-symbol)))
+                (export emit-symbol emit-package))
+               (emit-symbol
+                (export emit-symbol emit-package))
+               (t
+                (import source-symbol emit-package)
+                (export source-symbol emit-package)))))))))
+  (cl-cc/internal-feature-facade::reexport-feature-symbols
+   (find-package :cl-cc/emit)))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (%emit-reexport-codegen-symbols

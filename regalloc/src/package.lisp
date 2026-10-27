@@ -83,3 +83,48 @@
    #:vm-spill-dst
    #:vm-spill-slot
    #:*current-regalloc*))
+;;;;
+;;;; Phase 6: linear-scan register allocator extracted into its own
+;;;; feature package. Files moved here from :cl-cc/emit.
+
+(defpackage :cl-cc/internal-feature-facade
+  (:use :cl))
+
+(in-package :cl-cc/internal-feature-facade)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun reexport-feature-symbols (facade-package)
+    "Rebind facade exports to matching canonical feature symbols."
+    (let* ((prefix "CL-CC/CODEGEN-NATIVE/")
+           (feature-packages
+             (remove-if-not
+              (lambda (package)
+                (let ((name (package-name package)))
+                  (and (>= (length name) (length prefix))
+                       (string= prefix name :end2 (length prefix)))))
+              (list-all-packages)))
+           (names nil))
+      (do-external-symbols (symbol facade-package)
+        (push (symbol-name symbol) names))
+      (dolist (name names)
+        (let ((matches
+                (remove-duplicates
+                 (loop for package in feature-packages
+                       for symbol = (find-symbol name package)
+                       when (and symbol
+                                 (eq (nth-value 1 (find-symbol name package))
+                                     :external))
+                         collect symbol)
+                 :test #'eq)))
+          (cond
+            ((null matches))
+            ((cdr matches)
+             (error "Multiple feature packages export ~A for ~A."
+                    name (package-name facade-package)))
+            ((not (eq (first matches)
+                      (find-symbol name facade-package)))
+             (shadowing-import (first matches) facade-package)
+             (export (first matches) facade-package))))))))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (reexport-feature-symbols (find-package :cl-cc/regalloc)))

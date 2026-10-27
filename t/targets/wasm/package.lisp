@@ -1,0 +1,1 @@
+(defpackage #:cl-cc/codegen-native/targets/wasm/test (:use #:cl #:cl-weave #:cl-cc/codegen-native/targets/wasm #:cl-cc/codegen-native/targets/wasm/infra) (:shadowing-import-from #:cl-weave #:describe))

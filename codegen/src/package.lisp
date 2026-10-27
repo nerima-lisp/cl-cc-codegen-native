@@ -275,5 +275,9 @@
 ;; compile-to-x86-64-bytes as lexical (not dynamic), so sanitizer-enabled-p
 ;; never sees the enabled values.
 (in-package :cl-cc/codegen)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (cl-cc/internal-feature-facade::reexport-feature-symbols
+   (find-package :cl-cc/codegen)))
+
 (declaim (special *asan-instrumentation-enabled*
                   *ubsan-instrumentation-enabled*))

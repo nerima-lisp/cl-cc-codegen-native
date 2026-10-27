@@ -44,7 +44,24 @@
   :pathname "t"
   :serial t
   :components ((:file "package")
-               (:file "codegen-native-boundary-test"))
+   (:module "targets" :serial t
+    :components ((:module "x86-64" :serial t :components ((:file "package")))
+                 (:module "aarch64" :serial t :components ((:file "package")))
+                 (:module "riscv64" :serial t :components ((:file "package")))
+                 (:module "wasm" :serial t :components ((:file "package")))
+                 (:module "ppc64" :serial t :components ((:file "package")))))
+   (:module "lowering" :serial t :components ((:file "package")))
+   (:module "scheduling" :serial t :components ((:file "package")))
+   (:module "hardening" :serial t :components ((:file "package")))
+   (:module "sanitizer" :serial t :components ((:file "package")))
+   (:module "emit" :serial t
+    :components ((:module "llvm" :serial t :components ((:file "package")))
+                 (:module "mlir" :serial t :components ((:file "package")))
+                 (:module "ebpf" :serial t :components ((:file "package")))
+                 (:module "wasi" :serial t :components ((:file "package")))))
+   (:module "regalloc" :serial t :components ((:file "package")))
+   (:file "codegen-native-export-surface-test")
+   (:file "codegen-native-boundary-test"))
   :perform (asdf:test-op (op system)
              (declare (ignore op system))
              ;; RUN-ALL, not RUN-ALL-TESTS: the cl-weave that reaches this

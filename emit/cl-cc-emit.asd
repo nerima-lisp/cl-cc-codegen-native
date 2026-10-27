@@ -16,15 +16,27 @@
   :pathname "src"
   :serial t
   :components
-  ((:file "package")
-   (:file "wasm-types")
-   (:file "wasm")
-   (:file "wasm-trampoline")
-   (:file "llvm-ir")
-   (:file "mlir")
-   (:file "wasm-source-map")
-   (:file "wasm-wasi")
-   (:file "ebpf")
-   (:file "wasm-threads")
-   (:file "regalloc-advanced")
-   (:file "riscv64")))
+  ((:module "llvm"
+            :pathname "../../src/emit/llvm"
+            :serial t
+            :components ((:file "package")
+                         (:file "llvm-ir")))
+           (:module "mlir"
+            :pathname "../../src/emit/mlir"
+            :serial t
+            :components ((:file "package")
+                         (:file "mlir")))
+           (:module "ebpf"
+            :pathname "../../src/emit/ebpf"
+            :serial t
+            :components ((:file "package")
+                         (:file "ebpf")))
+           (:module "wasi"
+            :pathname "../../src/emit/wasi"
+            :serial t
+            :components ((:file "package")
+                         (:file "wasm-wasi")))
+           (:file "package")
+           (:file "wasm-types")
+           (:file "wasm")
+           (:file "wasm-trampoline")))

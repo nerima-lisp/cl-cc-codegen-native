@@ -2,7 +2,7 @@
 ;;;;
 ;;;; Run the suite under SBCL's sb-cover instrumentation (via cl-weave's
 ;;;; built-in :coverage support — no adapter) and print expression/branch
-;;;; percentages for codegen/src, regalloc/src and emit/src. Informational:
+;;;; percentages for src/. Informational:
 ;;;; unlike run-tests.lisp's test-op, this does not fail the run below any
 ;;;; threshold. Wire a :coverage-minimum-expression/:coverage-minimum-branch
 ;;;; gate into cl-cc-codegen-native.asd's :perform once a baseline is known.
@@ -29,9 +29,7 @@
    `(:source-registry (:tree ,(merge-pathnames "../" root)) :inherit-configuration))
   (proclaim '(optimize sb-cover:store-coverage-data))
   (asdf:load-system "cl-cc-codegen-native/test" :force t)
-  (let* ((src-dirs (list (asdf:system-relative-pathname "cl-cc-codegen-native" "codegen/src/")
-                          (asdf:system-relative-pathname "cl-cc-codegen-native" "regalloc/src/")
-                          (asdf:system-relative-pathname "cl-cc-codegen-native" "emit/src/")))
+  (let* ((src-dirs (list (asdf:system-relative-pathname "cl-cc-codegen-native" "src/")))
          (passed (uiop:symbol-call :cl-weave :run-all :reporter :spec
                                     :coverage t
                                     :coverage-include-pathnames src-dirs))
@@ -40,7 +38,7 @@
     (destructuring-bind (&key expression-covered expression-total
                                branch-covered branch-total)
         stats
-      (format t "~&~%Coverage (codegen/src, regalloc/src, emit/src):~%")
+      (format t "~&~%Coverage (src):~%")
       (format t "  Expression: ~,1F% (~D/~D)~%"
               (if (zerop expression-total) 100.0
                   (* 100.0 (/ expression-covered expression-total)))

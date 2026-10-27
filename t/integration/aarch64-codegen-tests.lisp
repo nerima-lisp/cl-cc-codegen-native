@@ -116,11 +116,6 @@
 ;;; AArch64 ISA alignment: all instructions are 4 bytes
 ;;; ─────────────────────────────────────────────────────────────────────────
 
-;;; ─────────────────────────────────────────────────────────────────────────
-;;; Regression guard: arm64 != x86-64
-;;; ARM64 compilation dispatches to the AArch64 backend rather than x86-64.
-;;; ─────────────────────────────────────────────────────────────────────────
-
 (it-sequential "aarch64-bswap-emitter-encoding"
   (let ((bytes (%a64-collect-bytes
                 (lambda (s)

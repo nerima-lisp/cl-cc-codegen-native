@@ -203,16 +203,6 @@ in place of the corresponding control characters."
 ;;; FR-242: Name section
 ;;; ─────────────────────────────────────────────────────────────────────────────
 
-(defun %wasm-name-section-subsection (id writer)
-  (let ((payload (wasm-binary-section-bytes writer)))
-    (cl-cc/binary/wasm:encode-wasm-section id payload)))
-
-(defun %wasm-name-assoc-vector (buffer assocs)
-  (wasm-binary-write-uleb128 buffer (length assocs))
-  (dolist (entry assocs)
-    (wasm-binary-write-uleb128 buffer (car entry))
-    (wasm-binary-write-name buffer (cdr entry))))
-
 (defun %wasm-function-name-assocs (module)
   (loop for func in (wasm-module-functions module)
         collect (cons (or (wasm-func-index func) 0)
@@ -233,12 +223,6 @@ in place of the corresponding control characters."
                             for idx from 0
                             when (typep inst 'vm-label)
                               collect (cons idx (%wasm-clean-debug-name (vm-name inst)))))))
-
-(defun %wasm-indirect-name-map (buffer entries)
-  (wasm-binary-write-uleb128 buffer (length entries))
-  (dolist (entry entries)
-    (wasm-binary-write-uleb128 buffer (car entry))
-    (%wasm-name-assoc-vector buffer (cdr entry))))
 
 (defun %wasm-build-name-section-bytes (module)
   "Build the name-subsection payload for the standard WebAssembly name custom section."

@@ -130,7 +130,7 @@ in place of the corresponding control characters."
          (high (+ low (max 1 inst-count)))
          (params (loop for reg in (or (wasm-func-params func) nil)
                        for i from 0
-                       collect (cl-cc/binary::make-dwarf-variable-location
+                       collect (cl-cc/binary:make-dwarf-variable-location
                                 :name (%wasm-human-local-name reg)
                                 :kind :register
                                 :register (min i 31)
@@ -138,12 +138,12 @@ in place of the corresponding control characters."
          (locals (loop for reg in (%wasm-registers-in-function func)
                        for i from 0
                        unless (member reg (wasm-func-params func) :test #'eq)
-                         collect (cl-cc/binary::make-dwarf-variable-location
+                         collect (cl-cc/binary:make-dwarf-variable-location
                                   :name (%wasm-human-local-name reg)
                                   :kind :register
                                   :register (min i 31)
                                   :pc-start low :pc-end high))))
-    (cl-cc/binary::make-dwarf-subprogram
+    (cl-cc/binary:make-dwarf-subprogram
      :name (%wasm-clean-debug-name (wasm-func-wat-name func))
      :low-pc low
      :high-pc high
@@ -162,7 +162,7 @@ in place of the corresponding control characters."
   (let* ((functions (wasm-module-functions module))
          (max-len (loop for f in functions maximize (length (wasm-func-source-instructions f))))
          (high (+ (* (max 0 (1- (length functions))) 16) (max 1 (or max-len 0))))
-         (cu (cl-cc/binary::make-dwarf-compile-unit
+         (cu (cl-cc/binary:make-dwarf-compile-unit
               :name "cl-cc-wasm-module"
               :producer "cl-cc wasm backend"
               :low-pc 0
@@ -171,11 +171,11 @@ in place of the corresponding control characters."
               :lines (%wasm-dwarf-lines-for-module module))))
     (let ((sections (cl-cc/binary:build-dwarf-debug-sections cu)))
       (list
-       (cons ".debug_info" (cl-cc/binary::dwarf-debug-sections-info sections))
-       (cons ".debug_abbrev" (cl-cc/binary::dwarf-debug-sections-abbrev sections))
-       (cons ".debug_line" (cl-cc/binary::dwarf-debug-sections-line sections))
-       (cons ".debug_str" (cl-cc/binary::dwarf-debug-sections-str sections))
-       (cons ".debug_loc" (cl-cc/binary::dwarf-debug-sections-loc sections))))))
+       (cons ".debug_info" (cl-cc/binary:dwarf-debug-sections-info sections))
+       (cons ".debug_abbrev" (cl-cc/binary:dwarf-debug-sections-abbrev sections))
+       (cons ".debug_line" (cl-cc/binary:dwarf-debug-sections-line sections))
+       (cons ".debug_str" (cl-cc/binary:dwarf-debug-sections-str sections))
+       (cons ".debug_loc" (cl-cc/binary:dwarf-debug-sections-loc sections))))))
 
 (defun emit-wasm-dwarf-sections (module stream)
   "FR-222: Emit DWARF 5 debug info as Wasm custom sections.

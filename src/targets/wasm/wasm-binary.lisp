@@ -15,11 +15,11 @@
 
 (defun wasm-binary-write-u8 (buffer byte)
   "Write BYTE to BUFFER using the unified byte-buffer API."
-  (cl-cc/binary::buffer-write-byte buffer byte))
+  (cl-cc/binary:buffer-write-byte buffer byte))
 
 (defun wasm-binary-write-bytes (buffer bytes)
   "Write BYTES to BUFFER using the unified byte-buffer API."
-  (cl-cc/binary::buffer-write-bytes buffer bytes))
+  (cl-cc/binary:buffer-write-bytes buffer bytes))
 
 (defun wasm-encode-unsigned-leb128 (value)
   "Return VALUE encoded as an unsigned LEB128 byte vector."
@@ -37,13 +37,13 @@
 
 (defun wasm-binary-section-buffer ()
   "Create a temporary byte-buffer for a section payload."
-  (cl-cc/binary::make-byte-buffer 32))
+  (cl-cc/binary:make-byte-buffer 32))
 
 (defun wasm-binary-section-bytes (writer)
   "Return bytes produced by calling WRITER with a temporary section buffer."
   (let ((payload (wasm-binary-section-buffer)))
     (funcall writer payload)
-    (cl-cc/binary::buffer-get-bytes payload)))
+    (cl-cc/binary:buffer-get-bytes payload)))
 
 (defun wasm-binary-write-section (buffer section-id writer)
   "Write a standard WASM section with SECTION-ID and payload from WRITER."

@@ -150,7 +150,18 @@ dependency is known well enough for reordering."
     (labels ((priority (i)
                (or (aref memo i)
                    (setf (aref memo i)
-                         (+ (cl-cc/optimize::%opt-inst-latency (aref vec i))
+                         (+ (case (type-of (aref vec i))
+                              ((vm-mul vm-integer-mul vm-mul-checked
+                                vm-float-mul vm-fma vm-car vm-cdr
+                                vm-closure-ref-idx vm-func-ref vm-values-to-list)
+                               4)
+                              ((vm-div vm-cl-div vm-float-div vm-truncate
+                                vm-floor-inst vm-ceiling-inst vm-round-inst
+                                vm-ffloor vm-fceiling vm-ftruncate vm-fround)
+                               40)
+                              ((vm-mod vm-rem) 30)
+                              ((vm-slot-read vm-get-global) 5)
+                              (otherwise 1))
                             (loop for succ in (aref succs i)
                                   maximize (priority succ) into best
                                   finally (return (or best 0))))))))

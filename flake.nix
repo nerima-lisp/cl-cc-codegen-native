@@ -56,7 +56,7 @@
       flake = false;
     };
     cl-cc-optimize = {
-      url = "github:nerima-lisp/cl-cc-optimize/f6cd93f54b4e04083aad0f3fee30def14a427f89";
+      url = "github:nerima-lisp/cl-cc-optimize/ea77f8c999a100cba7dcde3fce91d5722a15d549";
       flake = false;
     };
     cl-prolog-kit = {

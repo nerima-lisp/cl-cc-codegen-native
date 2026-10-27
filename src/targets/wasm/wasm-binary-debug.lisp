@@ -242,6 +242,7 @@ in place of the corresponding control characters."
 
 (defun %wasm-build-name-section-bytes (module)
   "Build the name-subsection payload for the standard WebAssembly name custom section."
+  ;; The public encoder returns a complete section; WAT @custom needs its payload.
   (let* ((custom-section
            (cl-cc/binary/wasm:encode-wasm-name-section
             "cl-cc-wasm-module"

@@ -298,7 +298,7 @@
           formatting = treefmtEval.${system}.config.build.check self;
 
           feature-lint = cl-nix-forge.lib.${system}.mkFeatureLintCheck {
-            src = self;
+            src = self.outPath;
             featureDefinitions = "nix/feature-dependencies.sexp";
             glossary = "docs/src/reference/glossary.md";
             glossaryHeadingPrefix = "## ";
@@ -320,7 +320,7 @@
           };
 
           orphan-tests = cl-nix-forge.lib.${system}.mkOrphanTestCheck {
-            src = self;
+            src = self.outPath;
             testRoots = [ "t" ];
             testSystems = [ "cl-cc-codegen-native/test" ];
           };

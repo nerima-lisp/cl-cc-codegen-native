@@ -44,25 +44,70 @@
   :pathname "t"
   :serial t
   :components ((:file "package")
-   (:module "targets" :serial t
-    :components ((:module "x86-64" :serial t :components ((:file "package")))
-                 (:module "aarch64" :serial t :components ((:file "package")))
-                 (:module "riscv64" :serial t :components ((:file "package")))
-                 (:module "wasm" :serial t :components ((:file "package")))
-                 (:module "ppc64" :serial t :components ((:file "package")))))
-   (:module "lowering" :serial t :components ((:file "package")))
-   (:module "scheduling" :serial t :components ((:file "package")))
-   (:module "hardening" :serial t :components ((:file "package")))
-   (:module "sanitizer" :serial t :components ((:file "package")))
-   (:module "emit" :serial t
-    :components ((:module "llvm" :serial t :components ((:file "package")))
-                 (:module "mlir" :serial t :components ((:file "package")))
-                 (:module "ebpf" :serial t :components ((:file "package")))
-                 (:module "wasi" :serial t :components ((:file "package")))))
-   (:module "regalloc" :serial t :components ((:file "package")))
-   (:file "codegen-native-export-surface-test")
-   (:file "codegen-native-boundary-test")
-   (:file "wasm-binary-golden-test"))
+ (:module "targets" :serial t
+  :components ((:module "x86-64" :serial t
+                :components ((:file "package")
+                             (:file "x86-64-codegen-emitter-tests")
+                             (:file "x86-64-codegen-insn-tests")
+                             (:file "x86-64-codegen-tests")
+                             (:file "x86-64-emit-logical-tests")
+                             (:file "x86-64-emit-ops-tests")
+                             (:file "x86-64-sequences-tests")))
+               (:module "aarch64" :serial t
+                :components ((:file "package")
+                             (:file "aarch64-encoding-tests")))
+               (:module "riscv64" :serial t
+                :components ((:file "package")))
+               (:module "wasm" :serial t
+                :components ((:file "package")
+                             (:file "wasm-binary-tests")
+                             (:file "wasm-extract-tests")
+                             (:file "wasm-features-tests")
+                             (:file "wasm-ir-tests")
+                             (:file "wasm-opcodes-tests")
+                             (:file "wasm-tests")
+                             (:file "wasm-trampoline-build-tests")
+                             (:file "wasm-trampoline-tests")
+                             (:file "wasm-types-tests")))
+               (:module "ppc64" :serial t
+                :components ((:file "package")
+                             (:file "ppc64-codegen-tests")))))
+ (:module "lowering" :serial t
+  :components ((:file "package")
+               (:file "mir-isel-tests")
+               (:file "regalloc-isel-tests")))
+ (:module "scheduling" :serial t
+  :components ((:file "package")))
+ (:module "hardening" :serial t
+  :components ((:file "package")))
+ (:module "sanitizer" :serial t
+  :components ((:file "package")))
+ (:module "emit" :serial t
+  :components ((:module "llvm" :serial t
+                :components ((:file "package")
+                             (:file "llvm-ir-tests")))
+               (:module "mlir" :serial t
+                :components ((:file "package")
+                             (:file "mlir-tests")))
+               (:module "ebpf" :serial t
+                :components ((:file "package")
+                             (:file "ebpf-tests")))
+               (:module "wasi" :serial t
+                :components ((:file "package")))))
+ (:module "regalloc" :serial t
+  :components ((:file "package")
+               (:file "regalloc-color-tests")
+               (:file "regalloc-lsa-tests")
+               (:file "regalloc-spill-tests")
+               (:file "regalloc-tests")))
+ (:file "mir-tests")
+ (:file "mir-target-tests")
+ (:file "target-tests")
+ (:file "native-advanced-bridge-tests")
+ (:file "codegen-native-export-surface-test")
+ (:file "codegen-native-boundary-test")
+ (:file "wasm-binary-golden-test")
+ (:module "integration" :serial t :components ((:file "security-hardening-tests") (:file "regalloc-scheduling-tests") (:file "aarch64-codegen-tests") (:file "aarch64-emit-tests") (:file "riscv64-tests") (:file "x86-64-emit-tests") (:file "x86-64-encoding-size-tests") (:file "x86-64-encoding-tests") (:file "x86-64-regs-tests") (:file "x86-64-vm-emitter-tests"))))
   :perform (asdf:test-op (op system)
              (declare (ignore op system))
              ;; RUN-ALL, not RUN-ALL-TESTS: the cl-weave that reaches this

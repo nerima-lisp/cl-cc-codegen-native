@@ -118,8 +118,7 @@
 
 ;;; ─────────────────────────────────────────────────────────────────────────
 ;;; Regression guard: arm64 != x86-64
-;;; This test would have FAILED before the fix because compile-file-to-native
-;;; called compile-to-x86-64-bytes for both architectures.
+;;; ARM64 compilation dispatches to the AArch64 backend rather than x86-64.
 ;;; ─────────────────────────────────────────────────────────────────────────
 
 (it-sequential "aarch64-bswap-emitter-encoding"

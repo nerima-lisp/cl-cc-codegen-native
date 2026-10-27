@@ -205,11 +205,7 @@ in place of the corresponding control characters."
 
 (defun %wasm-name-section-subsection (id writer)
   (let ((payload (wasm-binary-section-bytes writer)))
-    (wasm-binary-section-bytes
-     (lambda (section)
-       (wasm-binary-write-u8 section id)
-       (wasm-binary-write-uleb128 section (length payload))
-       (wasm-binary-write-bytes section payload)))))
+    (cl-cc/binary/wasm:encode-wasm-section id payload)))
 
 (defun %wasm-name-assoc-vector (buffer assocs)
   (wasm-binary-write-uleb128 buffer (length assocs))
@@ -245,13 +241,28 @@ in place of the corresponding control characters."
     (%wasm-name-assoc-vector buffer (cdr entry))))
 
 (defun %wasm-build-name-section-bytes (module)
-  "Build the payload for the standard WebAssembly name custom section."
-  (let ((chunks (list
-                 (%wasm-name-section-subsection 0 (lambda (b) (wasm-binary-write-name b "cl-cc-wasm-module")))
-                 (%wasm-name-section-subsection 1 (lambda (b) (%wasm-name-assoc-vector b (%wasm-function-name-assocs module))))
-                 (%wasm-name-section-subsection 2 (lambda (b) (%wasm-indirect-name-map b (%wasm-local-name-assocs module))))
-                 (%wasm-name-section-subsection 3 (lambda (b) (%wasm-indirect-name-map b (%wasm-label-name-assocs module)))))))
-    (apply #'concatenate '(simple-array (unsigned-byte 8) (*)) chunks)))
+  "Build the name-subsection payload for the standard WebAssembly name custom section."
+  (let* ((custom-section
+           (cl-cc/binary/wasm:encode-wasm-name-section
+            "cl-cc-wasm-module"
+            (%wasm-function-name-assocs module)
+            :local-names (%wasm-local-name-assocs module)
+            :label-names (%wasm-label-name-assocs module)))
+         (section-size-end
+           (position-if-not (lambda (byte) (logbitp 7 byte))
+                            custom-section
+                            :start 1))
+         (name-length-position (and section-size-end (1+ section-size-end))))
+    (unless (and section-size-end
+                 (= (aref custom-section 0) +wasm-section-custom+)
+                 (<= (+ name-length-position 5) (length custom-section))
+                 (= (aref custom-section name-length-position) 4)
+                 (equalp (subseq custom-section
+                                 (1+ name-length-position)
+                                 (+ name-length-position 5))
+                         #(110 97 109 101)))
+      (error "Invalid name custom section from cl-cc/binary/wasm encoder."))
+    (subseq custom-section (+ name-length-position 5))))
 
 (defun wasm-extended-names-feature-enabled-p ()
   "FR-242: Return true when extended wasm name-section metadata is enabled."

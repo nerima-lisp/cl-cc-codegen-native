@@ -124,19 +124,19 @@ can signal when the built-in serializer cannot encode a module.")
 
 (defun wasm-binary-write-custom-section (buffer name payload-string)
   "Append a custom section NAME with UTF-8-ish PAYLOAD-STRING to BUFFER."
-  (wasm-binary-write-section
-   buffer +wasm-section-custom+
-   (lambda (section)
-     (wasm-binary-write-name section name)
-     (let ((bytes (map 'vector #'char-code payload-string)))
-       (wasm-binary-write-bytes section bytes)))))
+  (wasm-binary-write-bytes
+   buffer
+   (cl-cc/binary/wasm:encode-wasm-custom-section
+    name
+    (map 'vector #'char-code payload-string))))
 
 (defun wasm-append-build-hash-section (bytes hash)
   "Return BYTES with a deterministic cl-cc build hash custom section appended."
-  (let ((buffer (cl-cc/binary::make-byte-buffer (+ (length bytes) 96))))
-    (wasm-binary-write-bytes buffer bytes)
-    (wasm-binary-write-custom-section buffer "cl-cc.build.sha256" hash)
-    (cl-cc/binary::buffer-get-bytes buffer)))
+  (concatenate '(simple-array (unsigned-byte 8) (*))
+               bytes
+               (cl-cc/binary/wasm:encode-wasm-custom-section
+                "cl-cc.build.sha256"
+                (map 'vector #'char-code hash))))
 
 (defun wasm-run-wasm-opt-passes (wasm-bytes &key (aot nil))
   "Run Binaryen optimization/removal passes when wasm-opt is available."

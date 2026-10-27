@@ -115,13 +115,14 @@ markdown_extensions:
       title: On this page
 
 # Five-section order from DOCS_STANDARD.md, minus the sections that have no
-# pages yet. Reference holds a single page, so it is a plain entry rather than
-# a section: the standard collapses any section down to a single entry when it
-# would otherwise hold exactly one page.
+# pages yet. Reference has multiple pages, so it is a section with one entry per
+# page.
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
-  - Reference: reference/api.md
+  - Reference:
+      - API: reference/api.md
+      - Glossary: reference/glossary.md
 
 not_in_nav: |
   notes/

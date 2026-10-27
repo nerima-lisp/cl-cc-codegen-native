@@ -14,10 +14,14 @@
   :pathname "src"
   :serial t
   :components
-  ((:file "package")
-   (:file "regalloc")
-   (:file "regalloc-defs-uses")
-   (:file "regalloc-policy")
-   (:file "regalloc-color")
-   (:file "regalloc-spill")
-   (:file "regalloc-allocate")))
+  ((:module "feature-regalloc"
+            :pathname "../../src/regalloc"
+            :serial t
+            :components ((:file "package")
+                         (:file "regalloc")
+                         (:file "regalloc-defs-uses")
+                         (:file "regalloc-policy")
+                         (:file "regalloc-color")
+                         (:file "regalloc-spill")
+                         (:file "regalloc-allocate")))
+           (:file "package")))

@@ -116,6 +116,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Feature boundaries and orphan tests are checked by the shared forge.
+    cl-nix-forge = {
+      url = "github:nerima-lisp/cl-nix-forge/950a8224940539a97c112a6b872f0ae5b6c115db";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.treefmt-nix.follows = "treefmt-nix";
+    };
+
     # `mkLintCheck` provides `checks.paredit-lint`: a parse-balance gate over
     # every .lisp/.asd file, separate from and cheaper than compiling them.
     paredit-cli = {
@@ -134,6 +141,7 @@
       self,
       nixpkgs,
       cl-weave,
+      cl-nix-forge,
       cl-cc-ast,
       cl-cc-type,
       cl-cc-bootstrap,
@@ -289,131 +297,33 @@
           # turning the formatter into an enforced CI gate.
           formatting = treefmtEval.${system}.config.build.check self;
 
-          orphan-tests =
-            pkgs.runCommand "cl-cc-codegen-native-orphan-tests"
-              {
-                nativeBuildInputs = [
-                  pkgs.sbcl
-                  pkgs.coreutils
-                  pkgs.findutils
-                ];
-                CL_SOURCE_REGISTRY = sourceRegistry;
-              }
-              ''
-                set -eu
+          feature-lint = cl-nix-forge.lib.${system}.mkFeatureLintCheck {
+            src = self;
+            featureDefinitions = "nix/feature-dependencies.sexp";
+            glossary = "docs/src/reference/glossary.md";
+            glossaryHeadingPrefix = "## ";
+            exportSurface = "t/export-surface.txt";
+            mode = "transition";
+            legacyInternalRefs = "t/legacy-internal-refs.sexp";
+            forbiddenNames = [
+              "phases"
+              "misc"
+              "utils"
+              "helpers"
+            ];
+            numberedPrefixes = [
+              "FR-"
+              "W"
+            ];
+            packagePrefix = "cl-cc/codegen-native/";
+            infraSuffix = "/infra";
+          };
 
-                export HOME="$TMPDIR/home"
-                mkdir -p "$HOME" "$out"
-                source_root="${self}"
-
-                find "$source_root" -type f -name '*.asd' -print | sort > "$TMPDIR/asd-files"
-                # The root run-tests.lisp is the test entrypoint invoked by the default check.
-                # This gate tracks ASDF-loaded test sources, not entrypoint scripts.
-                find "$source_root" -type f -name '*.lisp' -print \
-                  | awk -v root="$source_root/" '
-                      {
-                        relative = substr($0, length(root) + 1)
-                        count = split(relative, parts, "/")
-                        candidate = tolower(parts[count]) ~ /test/ &&
-                                    tolower(relative) != "run-tests.lisp"
-                        for (i = 1; i < count; i++) {
-                          directory = tolower(parts[i])
-                          if (directory == "t" || directory ~ /test/) candidate = 1
-                        }
-                        if (candidate) print relative
-                      }
-                    ' \
-                  | sort -u > "$TMPDIR/candidates"
-
-                asd_count="$(wc -l < "$TMPDIR/asd-files")"
-                candidate_count="$(wc -l < "$TMPDIR/candidates")"
-                if [ "$asd_count" -eq 0 ]; then
-                  echo "No local ASDF systems found" >&2
-                  exit 1
-                fi
-                if [ "$candidate_count" -eq 0 ]; then
-                  echo "No test or test-support Lisp files found" >&2
-                  exit 1
-                fi
-
-                cat > "$TMPDIR/orphan-tests.lisp" <<'LISP'
-                (require :asdf)
-
-                (defvar *orphan-source-root*
-                  (uiop:ensure-directory-pathname
-                   (truename (uiop:getenv "ORPHAN_SOURCE_ROOT"))))
-                (defvar *orphan-loaded-files* nil)
-                (defvar *orphan-test-named-systems* nil)
-
-                (defun orphan-relative-path (pathname)
-                  (let ((root (namestring *orphan-source-root*))
-                        (file (namestring (truename pathname))))
-                    (when (and (>= (length file) (length root))
-                               (string= root file :end2 (length root)))
-                      (subseq file (length root)))))
-
-                (defmethod asdf:perform :around
-                    ((operation asdf:load-op) (component asdf:component))
-                  (declare (ignore operation))
-                  (let ((pathname (ignore-errors (asdf:component-pathname component))))
-                    (when (and pathname (probe-file pathname))
-                      (let ((relative (orphan-relative-path pathname)))
-                        (when relative
-                          (pushnew relative *orphan-loaded-files* :test #'string=)))))
-                  (call-next-method))
-
-                (with-open-file (systems (uiop:getenv "ORPHAN_ASD_FILES"))
-                  (loop for asd = (read-line systems nil nil)
-                        while asd
-                        do (asdf:load-asd asd)))
-
-                ;; Load local ASDF systems whose names contain "test"; the default check runs test-op.
-                (let ((test-named-systems
-                        (loop for name in (asdf:registered-systems)
-                              for system = (asdf:find-system name nil)
-                              for source = (and system (asdf:system-source-file system))
-                              when (and source
-                                        (search "test" name :test #'char-equal)
-                                        (orphan-relative-path source))
-                                collect name)))
-                  (when (null test-named-systems)
-                    (error "No local ASDF system names containing test found"))
-                  (dolist (name (sort test-named-systems #'string<))
-                    (asdf:load-system name)
-                    (pushnew name *orphan-test-named-systems* :test #'equal)))
-
-                (with-open-file (output (uiop:getenv "ORPHAN_LOADED_FILES")
-                                        :direction :output :if-exists :supersede)
-                  (dolist (path (sort *orphan-loaded-files* #'string<))
-                    (format output "~a~%" path)))
-                (with-open-file (output (uiop:getenv "ORPHAN_TEST_NAMED_SYSTEMS")
-                                        :direction :output :if-exists :supersede)
-                  (dolist (name (sort *orphan-test-named-systems* #'string<))
-                    (format output "~a~%" name)))
-                (uiop:quit 0)
-                LISP
-
-                export ORPHAN_SOURCE_ROOT="$source_root"
-                export ORPHAN_ASD_FILES="$TMPDIR/asd-files"
-                export ORPHAN_LOADED_FILES="$TMPDIR/loaded-files"
-                export ORPHAN_TEST_NAMED_SYSTEMS="$TMPDIR/test-named-systems"
-                sbcl --script "$TMPDIR/orphan-tests.lisp"
-
-                sort -u "$TMPDIR/loaded-files" -o "$TMPDIR/loaded-files"
-                comm -23 "$TMPDIR/candidates" "$TMPDIR/loaded-files" > "$TMPDIR/orphans"
-                loaded_count="$(comm -12 "$TMPDIR/candidates" "$TMPDIR/loaded-files" | wc -l)"
-                orphan_count="$(wc -l < "$TMPDIR/orphans")"
-                test_named_system_count="$(wc -l < "$TMPDIR/test-named-systems")"
-                echo "Test/test-support Lisp candidates: $candidate_count"
-                echo "Candidates loaded by local ASDF systems with test in the name: $loaded_count"
-                echo "Local ASDF systems with test in the name loaded by LOAD-OP: $test_named_system_count"
-                if [ "$orphan_count" -gt 0 ]; then
-                  echo "Orphan test files:" >&2
-                  cat "$TMPDIR/orphans" >&2
-                  exit 1
-                fi
-                touch "$out/passed"
-              '';
+          orphan-tests = cl-nix-forge.lib.${system}.mkOrphanTestCheck {
+            src = self;
+            testRoots = [ "t" ];
+            testSystems = [ "cl-cc-codegen-native/test" ];
+          };
 
           # The docs package builds with `mkdocs --strict`, so a broken link or
           # a page missing from the nav fails the build. Without this the docs

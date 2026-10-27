@@ -61,7 +61,8 @@
                  (:module "wasi" :serial t :components ((:file "package")))))
    (:module "regalloc" :serial t :components ((:file "package")))
    (:file "codegen-native-export-surface-test")
-   (:file "codegen-native-boundary-test"))
+   (:file "codegen-native-boundary-test")
+   (:file "wasm-binary-golden-test"))
   :perform (asdf:test-op (op system)
              (declare (ignore op system))
              ;; RUN-ALL, not RUN-ALL-TESTS: the cl-weave that reaches this

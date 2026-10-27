@@ -10,7 +10,7 @@
 ;;; into the cl-cc/test suite convention; redundant coverage already present in
 ;;; regalloc-tests.lisp is intentionally omitted.
 
-(in-package :cl-cc/test)
+(in-package :cl-cc/codegen-native/regalloc/test)
 
 ;;; ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@
   "Construct a live-interval for graph-coloring tests.
 An explicitly supplied USE-POSITIONS (even nil/empty) is honored; only an
 absent USE-POSITIONS defaults to the interval's endpoints."
-  (cl-cc/regalloc::make-live-interval
+  (cl-cc/codegen-native/regalloc::make-live-interval
    :vreg vreg
    :start start
    :end end
@@ -30,12 +30,12 @@ absent USE-POSITIONS defaults to the interval's endpoints."
 ;;; ─── %color-spill-candidate (tie-break) ───────────────────────────────────
 
 (it-sequential "color-spill-candidate-tie-breaks-by-name-order"
-  (let* ((cl-cc/regalloc::*ml-regalloc-enabled* nil)
+  (let* ((cl-cc/codegen-native/regalloc::*ml-regalloc-enabled* nil)
          (a (make-color-test-interval :aaa 0 10 :use-positions '(0)))
          (z (make-color-test-interval :zzz 0 10 :use-positions '(0)))
-         (graph (cl-cc/regalloc::%color-build-interference-graph (list a z)))
-         (imap  (cl-cc/regalloc::%interval-map (list a z)))
-         (candidate (cl-cc/regalloc::%color-spill-candidate graph imap)))
+         (graph (cl-cc/codegen-native/regalloc::%color-build-interference-graph (list a z)))
+         (imap  (cl-cc/codegen-native/regalloc::%interval-map (list a z)))
+         (candidate (cl-cc/codegen-native/regalloc::%color-spill-candidate graph imap)))
     (expect candidate :to-be :aaa)))
 
 ;;; ─── %color-ordered-registers-for-interval ────────────────────────────────
@@ -43,7 +43,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
 (it-sequential "color-ordered-registers-for-interval-no-cc-unchanged"
   (let* ((interval (make-color-test-interval :v 0 10))
          (regs     '(:r0 :r1 :r2))
-         (result   (cl-cc/regalloc::%color-ordered-registers-for-interval interval nil regs)))
+         (result   (cl-cc/codegen-native/regalloc::%color-ordered-registers-for-interval interval nil regs)))
     (expect result :to-equal regs)))
 
 ;;; ─── %color-assign-spill-slots ────────────────────────────────────────────
@@ -52,7 +52,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
   (let* ((a (make-color-test-interval :a 0 10))
          (b (make-color-test-interval :b 5 15)))
     (multiple-value-bind (spill-map max-slot)
-        (cl-cc/regalloc::%color-assign-spill-slots (list a b) 0)
+        (cl-cc/codegen-native/regalloc::%color-assign-spill-slots (list a b) 0)
       (expect (/= (gethash :a spill-map) (gethash :b spill-map)) :to-be-truthy)
       (expect (>= (gethash :a spill-map) 1) :to-be-truthy)
       (expect (>= (gethash :b spill-map) 1) :to-be-truthy)
@@ -62,14 +62,14 @@ absent USE-POSITIONS defaults to the interval's endpoints."
   (let* ((a (make-color-test-interval :a 0 5))
          (b (make-color-test-interval :b 6 10)))
     (multiple-value-bind (spill-map max-slot)
-        (cl-cc/regalloc::%color-assign-spill-slots (list a b) 0)
+        (cl-cc/codegen-native/regalloc::%color-assign-spill-slots (list a b) 0)
       (declare (ignore max-slot))
       (expect (= (gethash :a spill-map) (gethash :b spill-map)) :to-be-truthy))))
 
 (it-sequential "color-assign-spill-slots-respects-offset"
   (let* ((a (make-color-test-interval :a 0 5)))
     (multiple-value-bind (spill-map max-slot)
-        (cl-cc/regalloc::%color-assign-spill-slots (list a) 4)
+        (cl-cc/codegen-native/regalloc::%color-assign-spill-slots (list a) 4)
       (expect (>= (gethash :a spill-map) 5) :to-be-truthy)
       (expect (= max-slot (gethash :a spill-map)) :to-be-truthy))))
 
@@ -78,7 +78,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
 (it-sequential "color-interval-map-builds-vreg-to-interval-hash"
   (let* ((a   (make-color-test-interval :a 0 10))
          (b   (make-color-test-interval :b 5 15))
-         (imap (cl-cc/regalloc::%interval-map (list a b))))
+         (imap (cl-cc/codegen-native/regalloc::%interval-map (list a b))))
     (expect (gethash :a imap) :to-be a)
     (expect (gethash :b imap) :to-be b)
     (expect (= 2 (hash-table-count imap)) :to-be-truthy)))
@@ -86,7 +86,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
 (it-sequential "color-interval-map-skips-nil-vreg"
   (let* ((no-vreg (make-color-test-interval nil 0 10))
          (named   (make-color-test-interval :v  0 10))
-         (imap    (cl-cc/regalloc::%interval-map (list no-vreg named))))
+         (imap    (cl-cc/codegen-native/regalloc::%interval-map (list no-vreg named))))
     (expect (= 1 (hash-table-count imap)) :to-be-truthy)
     (expect (gethash :v imap) :to-be named)))
 
@@ -97,7 +97,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
         (to   (make-hash-table :test #'eq)))
     (setf (gethash :a from) 1
           (gethash :b from) 2)
-    (cl-cc/regalloc::%copy-hash-into from to)
+    (cl-cc/codegen-native/regalloc::%copy-hash-into from to)
     (expect (= 1 (gethash :a to)) :to-be-truthy)
     (expect (= 2 (gethash :b to)) :to-be-truthy)))
 
@@ -105,13 +105,13 @@ absent USE-POSITIONS defaults to the interval's endpoints."
   (let ((from (make-hash-table :test #'eq))
         (to   (make-hash-table :test #'eq)))
     (setf (gethash :x from) :y)
-    (expect (cl-cc/regalloc::%copy-hash-into from to) :to-be to)))
+    (expect (cl-cc/codegen-native/regalloc::%copy-hash-into from to) :to-be to)))
 
 (it-sequential "color-copy-hash-into-does-not-mutate-source"
   (let ((from (make-hash-table :test #'eq))
         (to   (make-hash-table :test #'eq)))
     (setf (gethash :k from) 99)
-    (cl-cc/regalloc::%copy-hash-into from to)
+    (cl-cc/codegen-native/regalloc::%copy-hash-into from to)
     (expect (= 1 (hash-table-count from)) :to-be-truthy)))
 
 ;;; ─── %spill-weight ────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
                                             :use-positions use-positions
                                             :crosses-call-p crosses-call
                                             :return-value-p return-value)))
-    (expect (= expected (cl-cc/regalloc::%spill-weight interval)) :to-be-truthy))))
+    (expect (= expected (cl-cc/codegen-native/regalloc::%spill-weight interval)) :to-be-truthy))))
 
 (it-sequential "color-spill-weight-scoring call-cross"
   (destructuring-bind (start end use-positions crosses-call return-value expected) (list 0 10 '(1) t nil 2)
@@ -129,7 +129,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
                                             :use-positions use-positions
                                             :crosses-call-p crosses-call
                                             :return-value-p return-value)))
-    (expect (= expected (cl-cc/regalloc::%spill-weight interval)) :to-be-truthy))))
+    (expect (= expected (cl-cc/codegen-native/regalloc::%spill-weight interval)) :to-be-truthy))))
 
 (it-sequential "color-spill-weight-scoring return-val"
   (destructuring-bind (start end use-positions crosses-call return-value expected) (list 0 10 '(1) nil t 2)
@@ -137,7 +137,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
                                             :use-positions use-positions
                                             :crosses-call-p crosses-call
                                             :return-value-p return-value)))
-    (expect (= expected (cl-cc/regalloc::%spill-weight interval)) :to-be-truthy))))
+    (expect (= expected (cl-cc/codegen-native/regalloc::%spill-weight interval)) :to-be-truthy))))
 
 (it-sequential "color-spill-weight-scoring call+return"
   (destructuring-bind (start end use-positions crosses-call return-value expected) (list 0 10 '(1) t t 3)
@@ -145,7 +145,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
                                             :use-positions use-positions
                                             :crosses-call-p crosses-call
                                             :return-value-p return-value)))
-    (expect (= expected (cl-cc/regalloc::%spill-weight interval)) :to-be-truthy))))
+    (expect (= expected (cl-cc/codegen-native/regalloc::%spill-weight interval)) :to-be-truthy))))
 
 (it-sequential "color-spill-weight-scoring no-uses"
   (destructuring-bind (start end use-positions crosses-call return-value expected) (list 0 10 '() nil nil 0)
@@ -153,21 +153,21 @@ absent USE-POSITIONS defaults to the interval's endpoints."
                                             :use-positions use-positions
                                             :crosses-call-p crosses-call
                                             :return-value-p return-value)))
-    (expect (= expected (cl-cc/regalloc::%spill-weight interval)) :to-be-truthy))))
+    (expect (= expected (cl-cc/codegen-native/regalloc::%spill-weight interval)) :to-be-truthy))))
 
 ;;; ─── %build-spill-interference-matrix ─────────────────────────────────────
 
 (it-sequential "color-build-spill-interference-matrix-overlapping-interfere"
   (let* ((a (make-color-test-interval :a 0 10))
          (b (make-color-test-interval :b 5 15))
-         (matrix (cl-cc/regalloc::%build-spill-interference-matrix (list a b))))
+         (matrix (cl-cc/codegen-native/regalloc::%build-spill-interference-matrix (list a b))))
     (expect (member :b (gethash :a matrix) :test #'eq) :to-be-truthy)
     (expect (member :a (gethash :b matrix) :test #'eq) :to-be-truthy)))
 
 (it-sequential "color-build-spill-interference-matrix-non-overlapping-clear"
   (let* ((a (make-color-test-interval :a 0 5))
          (b (make-color-test-interval :b 6 10))
-         (matrix (cl-cc/regalloc::%build-spill-interference-matrix (list a b))))
+         (matrix (cl-cc/codegen-native/regalloc::%build-spill-interference-matrix (list a b))))
     (expect (gethash :a matrix) :to-be-null)
     (expect (gethash :b matrix) :to-be-null)))
 
@@ -175,7 +175,7 @@ absent USE-POSITIONS defaults to the interval's endpoints."
   (let* ((a (make-color-test-interval :a 0 10))
          (b (make-color-test-interval :b 3  8))
          (c (make-color-test-interval :c 0 10))
-         (matrix (cl-cc/regalloc::%build-spill-interference-matrix (list a b c))))
+         (matrix (cl-cc/codegen-native/regalloc::%build-spill-interference-matrix (list a b c))))
     (dolist (vreg '(:a :b :c))
       (dolist (neighbor (gethash vreg matrix))
         (expect (member vreg (gethash neighbor matrix) :test #'eq) :to-be-truthy)))))

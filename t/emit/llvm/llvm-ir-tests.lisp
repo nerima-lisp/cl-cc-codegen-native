@@ -1,6 +1,6 @@
 ;;;; packages/emit/tests/llvm-ir-tests.lisp
 
-(in-package :cl-cc/test)
+(in-package :cl-cc/codegen-native/emit/llvm/test)
 
 
 (it-sequential "llvm-ir-lowers-mir-arithmetic-memory-control-and-call"
@@ -31,7 +31,7 @@
     (mir-emit then-block :ret :srcs (list called))
     (mir-emit else-block :sub :dst diff :srcs (list rhs loaded) :type :integer)
     (mir-emit else-block :ret :srcs (list diff))
-    (let ((ir (cl-cc/emit:emit-llvm-ir fn :name "fr690-real")))
+    (let ((ir (cl-cc/codegen-native/emit/llvm:emit-llvm-ir fn :name "fr690-real")))
       (expect (search "target triple = \"x86_64-unknown-linux-gnu\"" ir) :to-be-truthy)
       (expect (search "define i64 @llvm-add-or-sub(i64 %reg0, i64 %reg1)" ir) :to-be-truthy)
       (expect (search "%reg2 = alloca i8, i64 8" ir) :to-be-truthy)

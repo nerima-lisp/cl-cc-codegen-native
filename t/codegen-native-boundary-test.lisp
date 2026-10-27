@@ -880,13 +880,13 @@ only owns the accumulation."
     (expect (%collect-emitted-octets
              (lambda (sink)
                (cl-cc/codegen-native/targets/riscv64::emit-riscv64-vm-spill-store
-                (cl-cc/regalloc:make-vm-spill-store :src-reg :t0 :slot 1) sink)))
+                (cl-cc/codegen-native/regalloc:make-vm-spill-store :src-reg :t0 :slot 1) sink)))
             :to-equalp #(#x23 #x3C #x54 #xFE)))
   (it "emit-riscv64-vm-spill-load encodes LD t1,-8(fp)"
     (expect (%collect-emitted-octets
              (lambda (sink)
                (cl-cc/codegen-native/targets/riscv64::emit-riscv64-vm-spill-load
-                (cl-cc/regalloc:make-vm-spill-load :dst-reg :t1 :slot 1) sink)))
+                (cl-cc/codegen-native/regalloc:make-vm-spill-load :dst-reg :t1 :slot 1) sink)))
             :to-equalp #(#x03 #x33 #x84 #xFF))))
 
 (describe-sequential "riscv64-codegen.lisp: emit-riscv64-vm-jump / -jump-zero"
@@ -1981,18 +1981,18 @@ only owns the accumulation."
 
 (describe-sequential "x86-64-codegen-helpers.lisp: populate-size-table"
   (it "maps a single type key to its size"
-    (let ((ht (cl-cc/codegen-native/targets/x86-64::populate-size-table '((vm-add 3)))))
-      (expect (gethash 'vm-add ht) :to-be 3)))
+    (let ((ht (cl-cc/codegen-native/targets/x86-64::populate-size-table '((cl-cc/vm:vm-add 3)))))
+      (expect (gethash 'cl-cc/vm:vm-add ht) :to-be 3)))
   (it "maps every type in a list-of-types entry to the same size"
-    (let ((ht (cl-cc/codegen-native/targets/x86-64::populate-size-table '(((vm-add vm-sub vm-mul) 3)))))
-      (expect (gethash 'vm-add ht) :to-be 3)
-      (expect (gethash 'vm-sub ht) :to-be 3)
-      (expect (gethash 'vm-mul ht) :to-be 3)))
+    (let ((ht (cl-cc/codegen-native/targets/x86-64::populate-size-table '(((cl-cc/vm:vm-add cl-cc/vm:vm-sub cl-cc/vm:vm-mul) 3)))))
+      (expect (gethash 'cl-cc/vm:vm-add ht) :to-be 3)
+      (expect (gethash 'cl-cc/vm:vm-sub ht) :to-be 3)
+      (expect (gethash 'cl-cc/vm:vm-mul ht) :to-be 3)))
   (it "combines multiple entries into one table, leaving unlisted keys absent"
-    (let ((ht (cl-cc/codegen-native/targets/x86-64::populate-size-table '((vm-add 3) ((vm-sub vm-mul) 5)))))
-      (expect (gethash 'vm-add ht) :to-be 3)
-      (expect (gethash 'vm-sub ht) :to-be 5)
-      (expect (gethash 'vm-mul ht) :to-be 5)
+    (let ((ht (cl-cc/codegen-native/targets/x86-64::populate-size-table '((cl-cc/vm:vm-add 3) ((cl-cc/vm:vm-sub cl-cc/vm:vm-mul) 5)))))
+      (expect (gethash 'cl-cc/vm:vm-add ht) :to-be 3)
+      (expect (gethash 'cl-cc/vm:vm-sub ht) :to-be 5)
+      (expect (gethash 'cl-cc/vm:vm-mul ht) :to-be 5)
       (expect (gethash 'vm-missing ht) :to-be nil))))
 
 (describe-sequential "sanitizer.lisp: sanitizer-enabled-p"
@@ -3723,11 +3723,11 @@ only owns the accumulation."
 (describe-sequential "post-ra-scheduler.lisp: %post-ra-stack-memory-inst-p"
   (it "recognizes vm-spill-store and vm-spill-load"
     (expect (and (cl-cc/codegen-native/scheduling::%post-ra-stack-memory-inst-p
-                  (cl-cc/regalloc:make-vm-spill-store :src-reg :rax :slot 1))
+                  (cl-cc/codegen-native/regalloc:make-vm-spill-store :src-reg :rax :slot 1))
                  t)
             :to-be t)
     (expect (and (cl-cc/codegen-native/scheduling::%post-ra-stack-memory-inst-p
-                  (cl-cc/regalloc:make-vm-spill-load :dst-reg :rax :slot 1))
+                  (cl-cc/codegen-native/regalloc:make-vm-spill-load :dst-reg :rax :slot 1))
                  t)
             :to-be t))
   (it "rejects a non-spill instruction"
@@ -4591,13 +4591,13 @@ only owns the accumulation."
     (expect (%collect-emitted-octets
              (lambda (sink)
                (cl-cc/codegen-native/targets/aarch64::emit-a64-vm-spill-store
-                (cl-cc/regalloc:make-vm-spill-store :src-reg :x1 :slot 1) sink)))
+                (cl-cc/codegen-native/regalloc:make-vm-spill-store :src-reg :x1 :slot 1) sink)))
             :to-equalp #(#xA1 #x83 #x1F #xF8)))
   (it "emit-a64-vm-spill-load encodes LDUR Xt,[X29,#-8] for slot 1"
     (expect (%collect-emitted-octets
              (lambda (sink)
                (cl-cc/codegen-native/targets/aarch64::emit-a64-vm-spill-load
-                (cl-cc/regalloc:make-vm-spill-load :dst-reg :x2 :slot 1) sink)))
+                (cl-cc/codegen-native/regalloc:make-vm-spill-load :dst-reg :x2 :slot 1) sink)))
             :to-equalp #(#xA2 #x83 #x5F #xF8))))
 
 (describe-sequential "aarch64-emitters.lisp: emit-a64-vm-prefetch (locality ECASE, indexed addressing, error paths)"

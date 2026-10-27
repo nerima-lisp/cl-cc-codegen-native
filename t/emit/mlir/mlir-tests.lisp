@@ -1,6 +1,6 @@
 ;;;; packages/emit/tests/mlir-tests.lisp
 
-(in-package :cl-cc/test)
+(in-package :cl-cc/codegen-native/emit/mlir/test)
 
 
 (it-sequential "mlir-lowers-clcc-dialect-arithmetic-call-return-and-branch"
@@ -28,7 +28,7 @@
     (mir-emit then-block :ret :srcs (list called))
     (mir-emit else-block :sub :dst diff :srcs (list rhs lhs) :type :integer)
     (mir-emit else-block :ret :srcs (list diff))
-    (let ((mlir (cl-cc/emit:emit-mlir fn :name "fr712-real")))
+    (let ((mlir (cl-cc/codegen-native/emit/mlir:emit-mlir fn :name "fr712-real")))
       (expect (search "module @fr712_real {" mlir) :to-be-truthy)
       (expect (search "func.func @mlir_add_or_sub(%arg0: i64, %arg1: i64) -> i64" mlir) :to-be-truthy)
       (expect (search "%reg2 = arith.constant 1 : i1" mlir) :to-be-truthy)
@@ -51,7 +51,7 @@
                           (make-mir-const :value 7 :type :integer))
               :type :void)
     (mir-emit entry :ret)
-    (let ((mlir (cl-cc/emit:emit-mlir fn :name "fr712-void")))
+    (let ((mlir (cl-cc/codegen-native/emit/mlir:emit-mlir fn :name "fr712-void")))
       (expect (search "func.func private @notify(i64)" mlir) :to-be-truthy)
       (expect (search "func.call @notify" mlir) :to-be-truthy)
       (expect (search ": (i64) -> ()" mlir) :to-be-truthy)
@@ -67,10 +67,10 @@
     (mir-emit entry :jump :srcs (list merge))
     (mir-emit merge :phi :dst value :srcs (list (cons entry (make-mir-const :value 1 :type :integer))))
     (mir-emit merge :ret :srcs (list value))
-    (signals error (cl-cc/emit:emit-mlir fn :name "fr712-phi"))))
+    (signals error (cl-cc/codegen-native/emit/mlir:emit-mlir fn :name "fr712-phi"))))
 
 (it-sequential "mlir-capabilities-describe-clcc-lowering-patterns"
-  (let ((caps (cl-cc/emit:mlir-bridge-capabilities)))
+  (let ((caps (cl-cc/codegen-native/emit/mlir:mlir-bridge-capabilities)))
     (expect (member :defined-dialect caps) :to-be-truthy)
     (expect (search "CLCC.ADD" (format nil "~S" caps)) :to-be-truthy)
     (expect (search "ARITH.ADDI" (format nil "~S" caps)) :to-be-truthy)

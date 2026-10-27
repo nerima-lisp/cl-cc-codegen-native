@@ -4,7 +4,7 @@
 ;;;         mir-module, builder API, SSA variable tracking, CFG utilities,
 ;;;         target-desc and predefined targets.
 
-(in-package :cl-cc/test)
+(in-package :cl-cc-codegen-native/test)
 
 
 ;;;; ─── mir-value ────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 ;;;;
 ;;;; Tests for target-desc struct, target registry, and utility functions.
 
-(in-package :cl-cc/test)
+(in-package :cl-cc-codegen-native/test)
 
 
 

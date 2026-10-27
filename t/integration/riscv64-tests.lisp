@@ -1,4 +1,4 @@
-(in-package :cl-cc/test)
+(in-package :cl-cc/codegen-native/targets/riscv64/test)
 
 
 
@@ -6,17 +6,17 @@
   :timeout
   30
   (expect (asdf:find-system :cl-cc-emit nil) :to-be-truthy)
-  (expect (fboundp 'cl-cc/emit:make-riscv64-assembler) :to-be-truthy)
-  (expect (fboundp 'cl-cc/emit:riscv64-emit-instruction) :to-be-truthy))
+  (expect (fboundp 'cl-cc/codegen-native/targets/riscv64:make-riscv64-assembler) :to-be-truthy)
+  (expect (fboundp 'cl-cc/codegen-native/targets/riscv64:riscv64-emit-instruction) :to-be-truthy))
 
 (it-sequential "riscv64-emits-concrete-addi-encoding"
   :timeout
   10
-  (let ((assembler (cl-cc/emit:make-riscv64-assembler)))
-    (cl-cc/emit:riscv64-emit-instruction
+  (let ((assembler (cl-cc/codegen-native/targets/riscv64:make-riscv64-assembler)))
+    (cl-cc/codegen-native/targets/riscv64:riscv64-emit-instruction
      assembler
      '(:addi :a0 :zero 42))
-    (expect (cl-cc/emit:riscv64-emit-bytes assembler)
+    (expect (cl-cc/codegen-native/targets/riscv64:riscv64-emit-bytes assembler)
             :to-equalp
             #(19 5 160 2))))
 
@@ -32,10 +32,10 @@
            (ash (nth (+ offset 3) bytes) 24)))
 
 (defun %riscv64-emit-list (&rest instructions)
-  (let ((asm (cl-cc/emit:make-riscv64-assembler)))
+  (let ((asm (cl-cc/codegen-native/targets/riscv64:make-riscv64-assembler)))
     (dolist (inst instructions)
-      (cl-cc/emit:riscv64-emit-instruction asm inst))
-    (coerce (cl-cc/emit:riscv64-emit-bytes asm) 'list)))
+      (cl-cc/codegen-native/targets/riscv64:riscv64-emit-instruction asm inst))
+    (coerce (cl-cc/codegen-native/targets/riscv64:riscv64-emit-bytes asm) 'list)))
 
 (it-sequential "riscv64-r-type-encodings"
   (expect (%riscv64-emit-list '(:add :a0 :a1 :a2)) :to-equal '(#x33 #x85 #xc5 #x00))
@@ -88,7 +88,7 @@
   (expect (%riscv64-emit-list '(:c.bnez :s0 4)) :to-equal '(#x11 #xe0)))
 
 (it-sequential "riscv64-function-prologue-epilogue"
-  (let ((bytes (coerce (cl-cc/emit:riscv64-emit-function
+  (let ((bytes (coerce (cl-cc/codegen-native/targets/riscv64:riscv64-emit-function
                         'sample '((:add :a0 :a0 :a1))
                         :save-regs '(:s0 :s1) :stack-size 8)
                        'list)))
@@ -101,18 +101,18 @@
     (expect (subseq bytes 32 36) :to-equal '(#x67 #x80 #x00 #x00))))
 
 (it-sequential "riscv64-zicond-encoding-fields"
-  (let ((eqz (cl-cc/codegen::encode-rv-czero-eqz 1 2 3))
-        (nez (cl-cc/codegen::encode-rv-czero-nez 4 5 6)))
+  (let ((eqz (cl-cc/codegen-native/targets/riscv64::encode-rv-czero-eqz 1 2 3))
+        (nez (cl-cc/codegen-native/targets/riscv64::encode-rv-czero-nez 4 5 6)))
     (expect (ldb (byte 7 0) eqz) :to-equal #x33)
     (expect (ldb (byte 3 12) eqz) :to-equal #b101)
-    (expect (ldb (byte 7 25) eqz) :to-equal cl-cc/codegen::+rv-zicond-funct7+)
+    (expect (ldb (byte 7 25) eqz) :to-equal cl-cc/codegen-native/targets/riscv64::+rv-zicond-funct7+)
     (expect (ldb (byte 7 0) nez) :to-equal #x33)
     (expect (ldb (byte 3 12) nez) :to-equal #b111)
-    (expect (ldb (byte 7 25) nez) :to-equal cl-cc/codegen::+rv-zicond-funct7+)))
+    (expect (ldb (byte 7 25) nez) :to-equal cl-cc/codegen-native/targets/riscv64::+rv-zicond-funct7+)))
 
 (it-sequential "riscv64-emit-zicond-pseudo-ops"
-  (let ((eqz (cl-cc/emit::encode-rv-czero-eqz 10 11 12))
-        (nez (cl-cc/emit::encode-rv-czero-nez 10 11 12)))
+  (let ((eqz (cl-cc/codegen-native/targets/riscv64::encode-rv-czero-eqz 10 11 12))
+        (nez (cl-cc/codegen-native/targets/riscv64::encode-rv-czero-nez 10 11 12)))
     (expect (%riscv64-emit-list '(:czero.eqz :a0 :a1 :a2)) :to-equal (list (ldb (byte 8 0) eqz)
                         (ldb (byte 8 8) eqz)
                         (ldb (byte 8 16) eqz)
@@ -124,28 +124,28 @@
 
 (it-sequential "riscv64-select-emits-zicond-sequence"
   (let* ((assignment (make-hash-table :test #'eq))
-         (ra (cl-cc/regalloc::make-regalloc-result :assignment assignment))
-         (inst (cl-cc:make-vm-select :dst :R0 :cond-reg :R1 :then-reg :R2 :else-reg :R3)))
+         (ra (cl-cc/codegen-native/regalloc::make-regalloc-result :assignment assignment))
+         (inst (cl-cc/vm:make-vm-select :dst :R0 :cond-reg :R1 :then-reg :R2 :else-reg :R3)))
     (setf (gethash :R0 assignment) :a0
           (gethash :R1 assignment) :a1
           (gethash :R2 assignment) :a2
           (gethash :R3 assignment) :a3)
-    (let* ((bytes (let ((cl-cc/codegen::*current-riscv64-regalloc* ra))
+    (let* ((bytes (let ((cl-cc/codegen-native/targets/riscv64::*current-riscv64-regalloc* ra))
                     (%riscv64-collect-bytes
-                     (lambda (s) (cl-cc/codegen::emit-riscv64-vm-select inst s)))))
+                     (lambda (s) (cl-cc/codegen-native/targets/riscv64::emit-riscv64-vm-select inst s)))))
            (w0 (%riscv64-word bytes 0))
            (w1 (%riscv64-word bytes 4))
            (w2 (%riscv64-word bytes 8)))
       (expect (length bytes) :to-equal 12)
-      (expect w0 :to-equal (cl-cc/codegen::encode-rv-czero-eqz
-                     cl-cc/codegen::+rv-t0+ cl-cc/codegen::+rv-a2+ cl-cc/codegen::+rv-a1+))
-      (expect w1 :to-equal (cl-cc/codegen::encode-rv-czero-nez
-                     cl-cc/codegen::+rv-a0+ cl-cc/codegen::+rv-a3+ cl-cc/codegen::+rv-a1+))
-      (expect w2 :to-equal (cl-cc/codegen::encode-rv-or
-                     cl-cc/codegen::+rv-a0+ cl-cc/codegen::+rv-a0+ cl-cc/codegen::+rv-t0+))
+      (expect w0 :to-equal (cl-cc/codegen-native/targets/riscv64::encode-rv-czero-eqz
+                     cl-cc/codegen-native/targets/riscv64::+rv-t0+ cl-cc/codegen-native/targets/riscv64::+rv-a2+ cl-cc/codegen-native/targets/riscv64::+rv-a1+))
+      (expect w1 :to-equal (cl-cc/codegen-native/targets/riscv64::encode-rv-czero-nez
+                     cl-cc/codegen-native/targets/riscv64::+rv-a0+ cl-cc/codegen-native/targets/riscv64::+rv-a3+ cl-cc/codegen-native/targets/riscv64::+rv-a1+))
+      (expect w2 :to-equal (cl-cc/codegen-native/targets/riscv64::encode-rv-or
+                     cl-cc/codegen-native/targets/riscv64::+rv-a0+ cl-cc/codegen-native/targets/riscv64::+rv-a0+ cl-cc/codegen-native/targets/riscv64::+rv-t0+))
       (dolist (word (list w0 w1 w2))
         (expect (= (ldb (byte 7 0) word) #x63) :to-be-falsy)))))
 
 (it-sequential "riscv64-vm-select-size-accounts-for-zicond-sequence"
-  (expect (cl-cc/codegen::riscv64-instruction-size
-                 (cl-cc:make-vm-select :dst :R0 :cond-reg :R1 :then-reg :R2 :else-reg :R3)) :to-equal 12))
+  (expect (cl-cc/codegen-native/targets/riscv64::riscv64-instruction-size
+                 (cl-cc/vm:make-vm-select :dst :R0 :cond-reg :R1 :then-reg :R2 :else-reg :R3)) :to-equal 12))

@@ -1,6 +1,6 @@
 ;;;; tests/unit/emit/mir-target-tests.lisp — MIR printer smoke tests and target-desc tests
 
-(in-package :cl-cc/test)
+(in-package :cl-cc-codegen-native/test)
 
 
 ;;;; ─── printer smoke tests ───────────────────────────────────────────────
